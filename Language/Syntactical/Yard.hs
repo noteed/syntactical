@@ -99,16 +99,16 @@ instance Show Shunt where
 
 pad n s = let s' = show s in replicate (n - length s') ' ' ++ s'
 
-steps s = do
+steps table s = do
   putStrLn $ "               Input               Stack              Output   Rule"
-  let sh = iterate shunt $ initial s
+  let sh = iterate (shunt table) $ initial s
   let l = length $ takeWhile (not . isDone) sh
   mapM_ (putStrLn . show) (take (l + 1) sh)
 
 initial s = S (map token $ tokenize s) [] [[]] Initial
 
-parse ts = fix $ initial ts
-  where fix s = let s' = shunt s in
+parse table ts = fix $ initial ts
+  where fix s = let s' = shunt table s in
                 if isDone s' then s' else fix s'
 
 isLeft (Left a) = True
@@ -116,31 +116,31 @@ isLeft _ = False
 isRight (Right a) = True
 isRight _ = False
 
-shunt :: Shunt -> Shunt
-shunt sh = case sh of
+shunt :: [Op] -> Shunt -> Shunt
+shunt table sh = case sh of
 
   S   ts                (s@(Op y):ss)      ([a]:oss) _ ->
-    case findOps y someTable of
+    case findOps y table of
       [Postfix _ [] _] -> S (Node [s,a]:ts)    ss           ([]:oss)       FlushApp
       [Closed _ [] _] -> S (Node [s,a]:ts)    ss           ([]:oss)       FlushApp
-      _ -> shunt' sh
-  _ -> shunt' sh
+      _ -> shunt' table sh
+  _ -> shunt' table sh
 
-shunt' sh = case sh of
+shunt' table sh = case sh of
 
   S   (t@(Num _):ts)    ss                  (os:oss)                _ ->
     S ts                ss                  ((t:os):oss)            Inert
 
   S   (t@(Sym x):ts)    (s@(Sym _):ss)      (os:oss) _ ->
-    case findOp x someTable of
+    case findOp x table of
       [] -> S ts        (s:ss)              ((t:os):oss)          Application
       [Prefix [_] _ _] -> S ts   (Op [x]:s:ss) (os:oss)           StackOp
       [Closed [_] _ SExpression] -> S ts   (Op [x]:s:ss) ([]:os:oss)           StackOp
       [Closed [_] _ _] -> S ts   (Op [x]:s:ss) (os:oss)           StackOp
-      _ ->  S (t:ts)    ss                  (apply s $ os:oss)    FlushApp
+      _ ->  S (t:ts)    ss                  (apply table s $ os:oss)    FlushApp
 
   S   (t@(Sym x):ts) (s@(Op y):ss) oss      _ ->
-    case (findOp x someTable, findOps y someTable) of
+    case (findOp x table, findOps y table) of
       ([],[o2@(Closed [_] _ SExpression)]) ->
         S ts                (s:ss)              ((t:os):oss')       SExpr
         where (os:oss') = oss
@@ -152,21 +152,21 @@ shunt' sh = case sh of
         S ts                (Op [x]:s:ss)       (os:oss')           StackApp
         where (os:oss') = oss
       ([o1@(Infix [_] [] _ _)], [o2@(Infix [_] [] _ _)]) ->
-        flushLower o1 x ts (s:ss) oss
+        flushLower table o1 x ts (s:ss) oss
       ([o1@(Infix l1 r1 _ _)], [o2@(Infix l2 (r2:r2s) _ _)])
         | l2++[r2] == l1 ->
           S ts      (Op l1:ss)            oss          StackOp
       ([o1@(Infix [_] _ _ _)], [o2@(Infix _ [] _ _)])
         | o1 `lower` o2 ->
           -- TODO possibly flush more ops
-          S ts      (Op [x]:ss)           (apply s oss) StackOp
+          S ts      (Op [x]:ss)           (apply table s oss) StackOp
         | otherwise ->
           S ts      (Op [x]:s:ss)         oss          StackOp
       ([o1@(Infix _ _ _ p1)], [o2@(Prefix _ _ p2)])
         | p1 > p2 ->
           S ts      (Op [x]:s:ss)         oss          StackOp
         | p1 < p2 ->
-          S ts      (Op [x]:ss)           (apply s oss) StackOp
+          S ts      (Op [x]:ss)           (apply table s oss) StackOp
       ([o1@(Prefix [_] _ _)], [o2@(Infix [_] _ _ _)]) ->
           S ts      (Op [x]:s:ss)         oss          StackOp
       ([o1@(Prefix [_] [] _)], [o2@(Prefix [_] [] _)]) ->
@@ -178,7 +178,7 @@ shunt' sh = case sh of
         | p1 > p2 ->
           S ts      (Op [x]:s:ss)         oss          StackOp
         | p1 < p2 ->
-          S ts      (Op [x]:ss)           (apply s oss) StackOp
+          S ts      (Op [x]:ss)           (apply table s oss) StackOp
         | otherwise -> error $ "precedence cannot be mixed: " ++ show t ++ ", " ++ show s
       ([o1@(Closed [_] _ SExpression)], _) ->
         S ts                (Op [x]:s:ss)              ([]:os:oss')            StackApp
@@ -201,7 +201,7 @@ shunt' sh = case sh of
       ([o1@(Closed l1 [] _)], [o2@(Closed l2 [r2] _)])
         | l2++[r2] == l1 ->
           S (o:ts)           ss       (os:oss')      MatchedR
-          where ((o:os):oss') = apply (Op l1) oss
+          where ((o:os):oss') = apply table (Op l1) oss
       ([o1@(Closed l1 r1 _)], [o2@(Closed l2 (r2:r2s) _)])
         | l2++[r2] == l1 ->
           S ts      (Op l1:ss)            oss          StackOp
@@ -211,21 +211,21 @@ shunt' sh = case sh of
       ([o1], [o2@(Closed _ _ _)]) ->
           S ts      (Op [x]:s:ss)         oss          StackOp
       ([o1@(Closed _ [] _)], [_]) ->
-          S (t:ts)            ss                  (apply s oss) FlushOp
+          S (t:ts)            ss                  (apply table s oss) FlushOp
       ([o1@(Closed _ _ _)], [_]) ->
           S ts      (Op [x]:s:ss)           oss FlushOp
       _ -> error $ "TODO: " ++ show t ++ ", " ++ show s
 
   S   (t@(Sym x):ts) (s@(Node _):ss)   (os:oss)              _ ->
-    case findOp x someTable of
+    case findOp x table of
       [] -> S ts        (s:ss)              ((t:os):oss)          Application
-      _ -> S (t:ts)     ss                  (apply s $ os:oss)            FlushApp
+      _ -> S (t:ts)     ss                  (apply table s $ os:oss)            FlushApp
 
   S   (t@(Sym x):ts)    ss                  (os:oss)                _ ->
-    case findOp x someTable of
+    case findOp x table of
       [] -> S ts       (t:ss)              ([]:os:oss)             StackApp
       -- x is the first sub-op, and the stack is empty or has a left bracket at its top.
-      _ -> case findOps [x] someTable of
+      _ -> case findOps [x] table of
         [] -> error $ "using middle sub-op " ++ x ++ " as first sub-op." ++
                       "\nstack: " ++ show ss ++
                       "\noutput: " ++ show (os:oss)
@@ -233,7 +233,7 @@ shunt' sh = case sh of
         _ -> S ts      (Op [x]:ss)  (os:oss)  StackOp
 
   S   (t@(Node _):ts) (s@(Op y):ss)       (os:oss)               _ ->
-    case findOps y someTable of
+    case findOps y table of
       [o2@(Closed [_] _ SExpression)] ->
         S ts              (s:ss)              ((t:os):oss)         SExpr
       _ ->
@@ -249,13 +249,13 @@ shunt' sh = case sh of
     S ts                (t:ss)              ([]:os:oss)             StackApp
 
   S   []                (s@(Op _):ss)       oss              _ ->
-    S []                ss                  (apply s oss)            FlushOp
+    S []                ss                  (apply table s oss)            FlushOp
 
   S   []                (s@(Sym _):ss)      oss              _ ->
-    S []                ss                  (apply s oss)            FlushApp
+    S []                ss                  (apply table s oss)            FlushApp
 
   S   []                (s@(Node _):ss)     oss             _ ->
-    S []                ss                  (apply s oss)            FlushApp
+    S []                ss                  (apply table s oss)            FlushApp
 
   S   []                []                  [[o]]           _ ->
     S []                []                  [[o]]                    Success
@@ -267,13 +267,13 @@ lower o1@(Infix [_] _ _ _) o2@(Infix _ [] _ _)
     | rAssoc o1 && prec o1 < prec o2 = True
 lower _ _ = False
 
-flushLower o1 x ts (s@(Op y):ss) oss = case findOps y someTable of
+flushLower table o1 x ts (s@(Op y):ss) oss = case findOps y table of
   [o2@(Infix [_] [] _ _)]
     | o1 `lower` o2 ->
-      flushLower o1 x ts ss (apply s oss)
+      flushLower table o1 x ts ss (apply table s oss)
     | otherwise ->
       S ts      (Op [x]:s:ss)         oss          StackOp
-flushLower o1 x ts ss oss =
+flushLower table o1 x ts ss oss =
    S ts      (Op [x]:ss)         oss          StackOp
 
 tokenize = words . tokenize'
@@ -286,27 +286,6 @@ tokenize' [] = []
 
 token (c:cs) | c `elem` ['a'..'z'] ++ "()⟨⟩+-*/?:#i°%!<>[]|," = Sym (c:cs)
              | otherwise = Num (read [c])
-
-someTable =
- [ Closed [] ["(",")"] DistfixAndDiscard
- , Closed [] ["⟨","⟩"] SExpression
- , Infix [] ["<<"] LeftAssociative 5
- , Infix [] [">>"] LeftAssociative 5
- , Infix [] ["+"] LeftAssociative 6
- , Infix [] ["-"] LeftAssociative 6
- , Infix [] ["*"] LeftAssociative 7
- , Infix [] ["/"] LeftAssociative 7
- , Infix [] ["?",":"] RightAssociative 5
- , Infix [] ["?'", ":'"] RightAssociative 9
- , Prefix [] ["#"] 8
- , Postfix [] ["°"] 7
- , Postfix [] ["%"] 8
- , Postfix [] ["!"] 9
- , Prefix [] ["if","then","else"] 1
- , Closed [] ["</","/>"] Keep
- , Closed [] ["[","|","]"] Keep
- , Infix [] [","] RightAssociative 1
- ]
 
 findOp op [] = []
 findOp op (Infix [] parts a p:xs)
@@ -348,141 +327,16 @@ break' p ls = case break p ls of
   (_, []) -> error "break': no element in l satisfying p"
   (l, r) -> (l ++ [head r], tail r)
 
-apply s@(Op y) (os:oss) = (Node (s:reverse l) : r) : oss
-  where nargs = case findOps y someTable of
+apply table s@(Op y) (os:oss) = (Node (s:reverse l) : r) : oss
+  where nargs = case findOps y table of
           [Infix _ _ _ _] -> length y + 1
           [Closed _ _ _] -> length y - 1
           [_] -> length y
           [] -> error $ "bug: wrong use of apply: " ++ show y
         (l,r) = splitAt nargs os -- TODO test correct lenght of os
-apply s@(Sym _) (os:h:oss) =  (ap:h):oss
+apply table s@(Sym _) (os:h:oss) =  (ap:h):oss
   where ap = if null os then s else Node (s:reverse os)
-apply s@(Node _) (os:h:oss) =  (ap:h):oss
+apply table s@(Node _) (os:h:oss) =  (ap:h):oss
   where ap = if null os then s else Node (s:reverse os)
-apply s oss = error $ "can't apply " ++ show s ++ " to " ++ show oss
-
--- [(input, expected output)]
-tests :: [(String,String)]
-tests = [
-  ("1","1"),
-  ("a","a"),
-
-  ("1 + 2","⟨+ 1 2⟩"),
-  ("a + 2","⟨+ a 2⟩"),
-  ("1 + b","⟨+ 1 b⟩"),
-  ("a + b","⟨+ a b⟩"),
-  ("1 * 2","⟨* 1 2⟩"),
-
-  ("1 + 2 + 3","⟨+ ⟨+ 1 2⟩ 3⟩"),
-  ("1 + 2 * 3","⟨+ 1 ⟨* 2 3⟩⟩"),
-  ("1 * 2 + 3","⟨+ ⟨* 1 2⟩ 3⟩")
-
-  , ("0 << 1 + 2 * 3", "⟨<< 0 ⟨+ 1 ⟨* 2 3⟩⟩⟩")
-  , ("0 + 1 << 2 * 3", "⟨<< ⟨+ 0 1⟩ ⟨* 2 3⟩⟩")
-  , ("0 + 1 * 2 << 3", "⟨<< ⟨+ 0 ⟨* 1 2⟩⟩ 3⟩")
-  , ("0 << 1 * 2 + 3", "⟨<< 0 ⟨+ ⟨* 1 2⟩ 3⟩⟩")
-  , ("0 * 1 << 2 + 3", "⟨<< ⟨* 0 1⟩ ⟨+ 2 3⟩⟩")
-  , ("0 * 1 + 2 << 3", "⟨<< ⟨+ ⟨* 0 1⟩ 2⟩ 3⟩")
-  , ("(0 << 1) + 2 * 3", "⟨+ ⟨<< 0 1⟩ ⟨* 2 3⟩⟩")
-  , ("0 << (1 + 2) * 3", "⟨<< 0 ⟨* ⟨+ 1 2⟩ 3⟩⟩")
-  , ("0 << 1 + (2 * 3)", "⟨<< 0 ⟨+ 1 ⟨* 2 3⟩⟩⟩")
-  , ("((0 << 1) + 2) * 3", "⟨* ⟨+ ⟨<< 0 1⟩ 2⟩ 3⟩")
-  , ("(((0 << 1) + 2) * 3)", "⟨* ⟨+ ⟨<< 0 1⟩ 2⟩ 3⟩")
-  , ("⟨<< 0 1⟩ + 2 * 3", "⟨+ ⟨<< 0 1⟩ ⟨* 2 3⟩⟩")
-  , ("⟨+ ⟨<< 0 1⟩ 2⟩ * 3", "⟨* ⟨+ ⟨<< 0 1⟩ 2⟩ 3⟩")
-
-  , ("f a","⟨f a⟩"),
-  ("f 1","⟨f 1⟩"),
-  ("f a b","⟨f a b⟩"),
-  ("f 1 b","⟨f 1 b⟩"),
-  ("f a 1","⟨f a 1⟩"),
-
-  ("f a + 1","⟨+ ⟨f a⟩ 1⟩"),
-  ("1 + f a","⟨+ 1 ⟨f a⟩⟩"),
-
-  ("(a)","a"),
-  ("((a))","a"),
-  ("1 + (a)","⟨+ 1 a⟩"),
-  ("1 + ((a))","⟨+ 1 a⟩"),
-  ("(1 + 2)","⟨+ 1 2⟩"),
-  ("(1 + (a))","⟨+ 1 a⟩"),
-  ("(1 + ((a)))","⟨+ 1 a⟩"),
-
-  ("1 * (2 + 3)","⟨* 1 ⟨+ 2 3⟩⟩"),
-  ("(1 + 2) * 3","⟨* ⟨+ 1 2⟩ 3⟩"),
-  ("1 + (f a)","⟨+ 1 ⟨f a⟩⟩"),
-  ("(f a) + 1","⟨+ ⟨f a⟩ 1⟩"),
-  ("(f a b) 1","⟨⟨f a b⟩ 1⟩"),
-  ("(f a b) 1 2","⟨⟨f a b⟩ 1 2⟩"),
-  ("1 + (f a) 2","⟨+ 1 ⟨⟨f a⟩ 2⟩⟩")
-  , ("f (a + b) (1 - 2)", "⟨f ⟨+ a b⟩ ⟨- 1 2⟩⟩")
-
-  , ("⟨1⟩", "⟨1⟩")
-  , ("⟨a⟩", "⟨a⟩")
-  , ("⟨⟨1⟩⟩", "⟨⟨1⟩⟩")
-  , ("⟨⟨a⟩⟩", "⟨⟨a⟩⟩")
-  , ("⟨+ a b⟩", "⟨+ a b⟩")
-  , ("⟨+ a b⟩ * (1 - 2)", "⟨* ⟨+ a b⟩ ⟨- 1 2⟩⟩")
-  , ("(a + b) * ⟨- 1 2⟩", "⟨* ⟨+ a b⟩ ⟨- 1 2⟩⟩")
-  , ("⟨* (a + b) (1 - 2)⟩", "⟨* ⟨+ a b⟩ ⟨- 1 2⟩⟩")
-  , ("⟨* (a + b) ⟨- 1 2⟩⟩", "⟨* ⟨+ a b⟩ ⟨- 1 2⟩⟩")
-
-  , ("true ? 1 : 0", "⟨?: true 1 0⟩") -- TODO this sould be _?_:_ or __?__:__ or ␣?␣:␣
-  , ("true ? 1 : 0 + 1", "⟨?: true 1 ⟨+ 0 1⟩⟩")
-  , ("true ?' 1 :' 0 + 1", "⟨+ ⟨?':' true 1 0⟩ 1⟩")
-
-  , ("# a", "⟨# a⟩")
-  , ("a # b", "⟨a ⟨# b⟩⟩")
-  , ("# # a", "⟨# ⟨# a⟩⟩")
-
-  , ("a !", "⟨! a⟩")
-  , ("a ! b", "⟨⟨! a⟩ b⟩")
-  , ("a ! !", "⟨! ⟨! a⟩⟩")
-
-  , ("# a °", "⟨° ⟨# a⟩⟩")
---  , ("# a %", Error "precedence cannot be mixed")
-  , ("# a !", "⟨# ⟨! a⟩⟩")
-
-  , ("if true then 1 else 0", "⟨ifthenelse true 1 0⟩")
-  , ("if 2 then 1 else 0", "⟨ifthenelse 2 1 0⟩")
-  , ("if a b then 1 else 0", "⟨ifthenelse ⟨a b⟩ 1 0⟩")
-  , ("if true then a b else 0", "⟨ifthenelse true ⟨a b⟩ 0⟩")
-  , ("if true then 1 else a b", "⟨ifthenelse true 1 ⟨a b⟩⟩")
-  , ("1 + if true then 1 else 0", "⟨+ 1 ⟨ifthenelse true 1 0⟩⟩")
-  , ("1 + if true then 1 else a b + c", "⟨+ 1 ⟨ifthenelse true 1 ⟨+ ⟨a b⟩ c⟩⟩⟩")
-  , ("f if true then 1 else 0", "⟨f ⟨ifthenelse true 1 0⟩⟩")
-
-  , ("</ a />","⟨<//> a⟩")
-  , ("</ 0 />","⟨<//> 0⟩")
-  , ("</ f a b />","⟨<//> ⟨f a b⟩⟩")
-  , ("</ f 1 2 />","⟨<//> ⟨f 1 2⟩⟩")
-  , ("</ a + b />","⟨<//> ⟨+ a b⟩⟩")
-  , ("</ a + b * 2 />","⟨<//> ⟨+ a ⟨* b 2⟩⟩⟩")
-  , ("</ a /> + 1","⟨+ ⟨<//> a⟩ 1⟩")
-  , ("1 + </ a />","⟨+ 1 ⟨<//> a⟩⟩")
-  , ("1 + </ a - b /> * 2","⟨+ 1 ⟨* ⟨<//> ⟨- a b⟩⟩ 2⟩⟩")
-  , ("</ a + b /> c","⟨⟨<//> ⟨+ a b⟩⟩ c⟩")
-  , ("f </ a />","⟨f ⟨<//> a⟩⟩")
-  , ("f </ a + b />","⟨f ⟨<//> ⟨+ a b⟩⟩⟩")
-
-  , ("[ a | b ]","⟨[|] a b⟩")
-
-  , ("2","2")
-  ]
-
-checkTests = mapM_ check tests
-
-check (i,o) = case parse i of
-  S [] [] [[o']] Success ->
-    if o == show o'
-    then return ()
-    else do putStrLn $ "FAIL: input: " ++ i
-              ++ ", expected: " ++ o
-              ++ ", computed: " ++ show o'
-            steps i
-  _ -> do putStrLn $ "FAIL: input: " ++ i
-            ++ ", expected: " ++ o
-            ++ ", computed: Nothing."
-          steps i
-                           
+apply table s oss = error $ "can't apply " ++ show s ++ " to " ++ show oss
 
