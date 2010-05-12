@@ -1,9 +1,10 @@
 module Language.Syntactical.Tests.Examples where
 
+import Language.Syntactical.Data
 import Language.Syntactical.Yard
 
-table0 :: [Op]
-table0 =
+table0 :: Table
+table0 = Table
  [ Closed [] ["(",")"] DistfixAndDiscard
  , Closed [] ["⟨","⟩"] SExpression
  , Infix [] ["<<"] LeftAssociative 5
@@ -133,18 +134,34 @@ testsTable0 = [
 
 checkTable0 = checkTests table0 testsTable0
 
+parse0 = shunt table0 . tokenize
+
 checkTests table l = mapM_ (check table) l
 
-check table (i,o) = case parse table i of
-  S [] [] [[o']] Success ->
+check table (i,o) =
+  let ts = tokenize i in case shunt table ts of
+  Right o' ->
     if o == show o'
     then return ()
     else do putStrLn $ "FAIL: input: " ++ i
               ++ ", expected: " ++ o
               ++ ", computed: " ++ show o'
-            steps table i
+            steps table ts
   _ -> do putStrLn $ "FAIL: input: " ++ i
             ++ ", expected: " ++ o
             ++ ", computed: Nothing."
-          steps table i
+          steps table ts
+
+tokenize = map (token) . separate
+
+separate = words . separate'
+separate' ('(':cs) = " ( " ++ separate' cs
+separate' (')':cs) = " ) " ++ separate' cs
+separate' ('⟨':cs) = " ⟨ " ++ separate' cs
+separate' ('⟩':cs) = " ⟩ " ++ separate' cs
+separate' (c:cs) = c : separate' cs
+separate' [] = []
+
+token (c:cs) | c `elem` ['a'..'z'] ++ "()⟨⟩+-*/?:#i°%!<>[]|," = Sym (c:cs)
+             | otherwise = Num (read [c])
 

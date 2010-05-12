@@ -15,10 +15,12 @@ main = defaultMain
 testYard :: Test
 testYard = testGroup "Language.Syntactical.Yard"
   [ testGroup "Language.Syntactical.Tests.Examples - table0" $
-    map (helper table0) testsTable0
+    map (helper parse0) testsTable0
   ]
 
-helper table (i,o) = testCase i $ case parse table i of
-  S [] [] [[o']] Success -> o @?= show o'
+-- Apply the parser p to i and check if it returns
+-- the expected value o.
+helper p (i,o) = testCase i $ case p i of
+  Right o' -> o @?= show o'
   _ -> assertFailure "cannot parse"
 

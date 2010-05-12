@@ -18,54 +18,7 @@ module Language.Syntactical.Yard where
 
 import Data.List
 
-data Tree = Node [Tree]
--- The to-be-shunted tokens. Only the information for the
--- shunting yard algorithm is represented. Actual tokens should
--- be converted to this representation.
-           | Num Int
-           | Sym String
-           | Op [String] -- on the stack, TODO turn into Sym on the output
-  deriving Eq
-
-data Op = Infix [String] [String] Associativity Precedence -- infix
-        | Prefix [String] [String] Precedence -- prefix
-        | Postfix [String] [String] Precedence -- postfix
-        | Closed [String] [String] Kind
-        -- TODO SExpression so the user can choose the brackets for s-expr
-  deriving Show
-
-data Kind = Discard | Keep | SExpression | Distfix | DistfixAndDiscard
-  deriving Show
-
-data Associativity = NonAssociative | LeftAssociative | RightAssociative
-  deriving (Show, Eq)
-
-type Precedence = Int
-
-instance Show Tree where
-  show = display
-
-display :: Tree -> String
-display = tail . display'
-  where
-  display' (Num i) = ' ' : show i
-  display' (Sym s) = ' ' : s
-  display' (Op l) = ' ' : concat l
-  display' (Node es) = ' ' : '⟨' : tail (concatMap display' es) ++ "⟩"
-
-associativity (Infix _ _ a _) = a
-
-prec (Infix _ _ _ p) = p
-
-nonAssoc = (NonAssociative ==) . associativity
-lAssoc = (LeftAssociative ==) . associativity
-rAssoc = (RightAssociative ==) . associativity
-
-isInfix (Infix _ _ _ _) = True
-isInfix _ = False
-
-isInfix' (Infix xs _ _ _) ys = xs == ys
-isInfix' _ _ = False
+import Language.Syntactical.Data
 
 data Rule = Initial
           | Inert -- not an operator or an applicator
@@ -100,34 +53,36 @@ instance Show Shunt where
 
 pad n s = let s' = show s in replicate (n - length s') ' ' ++ s'
 
-steps table s = do
+steps table ts = do
   putStrLn $ "               Input               Stack              Output   Rule"
-  let sh = iterate (shunt table) $ initial s
+  let sh = iterate (step table) $ initial ts
   let l = length $ takeWhile (not . isDone) sh
   mapM_ (putStrLn . show) (take (l + 1) sh)
 
-initial s = S (map token $ tokenize s) [] [[]] Initial
-
-parse table ts = fix $ initial ts
-  where fix s = let s' = shunt table s in
-                if isDone s' then s' else fix s'
+initial ts = S ts [] [[]] Initial
 
 isLeft (Left a) = True
 isLeft _ = False
 isRight (Right a) = True
 isRight _ = False
 
-shunt :: [Op] -> Shunt -> Shunt
-shunt table sh = case sh of
+shunt table ts = case fix $ initial ts of
+  S [] [] [[o']] Success -> Right o'
+  _ -> Left "TODO error message"
+  where fix s = let s' = step table s in
+                if isDone s' then s' else fix s'
+
+step :: Table -> Shunt -> Shunt
+step table sh = case sh of
 
   S   ts                (s@(Op y):ss)      ([a]:oss) _ ->
     case findOps y table of
       [Postfix _ [] _] -> S (Node [s,a]:ts)    ss           ([]:oss)       FlushApp
       [Closed _ [] _] -> S (Node [s,a]:ts)    ss           ([]:oss)       FlushApp
-      _ -> shunt' table sh
-  _ -> shunt' table sh
+      _ -> step' table sh
+  _ -> step' table sh
 
-shunt' table sh = case sh of
+step' table sh = case sh of
 
   S   (t@(Num _):ts)    ss                  (os:oss)                _ ->
     S ts                ss                  ((t:os):oss)            Inert
@@ -263,11 +218,6 @@ shunt' table sh = case sh of
 
   _ -> sh { rule = Unexpected }
 
-lower o1@(Infix [_] _ _ _) o2@(Infix _ [] _ _)
-    | nonAssoc o1 || (lAssoc o1 && prec o1 <= prec o2) = True
-    | rAssoc o1 && prec o1 < prec o2 = True
-lower _ _ = False
-
 flushLower table o1 x ts (s@(Op y):ss) oss = case findOps y table of
   [o2@(Infix [_] [] _ _)]
     | o1 `lower` o2 ->
@@ -276,57 +226,6 @@ flushLower table o1 x ts (s@(Op y):ss) oss = case findOps y table of
       S ts      (Op [x]:s:ss)         oss          StackOp
 flushLower table o1 x ts ss oss =
    S ts      (Op [x]:ss)         oss          StackOp
-
-tokenize = words . tokenize'
-tokenize' ('(':cs) = " ( " ++ tokenize' cs
-tokenize' (')':cs) = " ) " ++ tokenize' cs
-tokenize' ('⟨':cs) = " ⟨ " ++ tokenize' cs
-tokenize' ('⟩':cs) = " ⟩ " ++ tokenize' cs
-tokenize' (c:cs) = c : tokenize' cs
-tokenize' [] = []
-
-token (c:cs) | c `elem` ['a'..'z'] ++ "()⟨⟩+-*/?:#i°%!<>[]|," = Sym (c:cs)
-             | otherwise = Num (read [c])
-
-findOp op [] = []
-findOp op (Infix [] parts a p:xs)
-  | op `elem` parts =
-     let (l,r) = break' (== op) parts
-     in Infix l r a p : findOp op xs
-  | otherwise = findOp op xs
-findOp op (Prefix [] parts p:xs)
-  | op `elem` parts =
-     let (l,r) = break' (== op) parts
-     in Prefix l r p : findOp op xs
-  | otherwise = findOp op xs
-findOp op (Postfix [] parts p:xs)
-  | op `elem` parts =
-     let (l,r) = break' (== op) parts
-     in Postfix l r p : findOp op xs
-  | otherwise = findOp op xs
-findOp op (Closed [] parts k:xs)
-  | op `elem` parts =
-     let (l,r) = break' (== op) parts
-     in Closed l r k : findOp op xs
-  | otherwise = findOp op xs
-
-findOps ops [] = []
-findOps ops (Infix [] parts a p:xs)
-  | ops `isPrefixOf` parts = Infix ops (drop (length ops) parts) a p : findOps ops xs
-  | otherwise = findOps ops xs
-findOps ops (Prefix [] parts p:xs)
-  | ops `isPrefixOf` parts = Prefix ops (drop (length ops) parts) p : findOps ops xs
-  | otherwise = findOps ops xs
-findOps ops (Postfix [] parts p:xs)
-  | ops `isPrefixOf` parts = Postfix ops (drop (length ops) parts) p : findOps ops xs
-  | otherwise = findOps ops xs
-findOps ops (Closed [] parts k:xs)
-  | ops `isPrefixOf` parts = Closed ops (drop (length ops) parts) k : findOps ops xs
-  | otherwise = findOps ops xs
-
-break' p ls = case break p ls of
-  (_, []) -> error "break': no element in l satisfying p"
-  (l, r) -> (l ++ [head r], tail r)
 
 apply table s@(Op y) (os:oss) = (Node (s:reverse l) : r) : oss
   where nargs = case findOps y table of
