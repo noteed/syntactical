@@ -2,8 +2,8 @@ module Language.Syntactical.Tests.Examples where
 
 import Language.Syntactical.Yard
 
-someTable :: [Op]
-someTable =
+table0 :: [Op]
+table0 =
  [ Closed [] ["(",")"] DistfixAndDiscard
  , Closed [] ["⟨","⟩"] SExpression
  , Infix [] ["<<"] LeftAssociative 5
@@ -25,8 +25,8 @@ someTable =
  ]
 
 -- [(input, expected output)]
-tests :: [(String,String)]
-tests = [
+testsTable0 :: [(String,String)]
+testsTable0 = [
   ("1","1"),
   ("a","a"),
 
@@ -129,11 +129,11 @@ tests = [
   , ("f </ a + b />","⟨f ⟨<//> ⟨+ a b⟩⟩⟩")
 
   , ("[ a | b ]","⟨[|] a b⟩")
-
-  , ("2","2")
   ]
 
-checkTests = mapM_ (check someTable) tests
+checkTable0 = checkTests table0 testsTable0
+
+checkTests table l = mapM_ (check table) l
 
 check table (i,o) = case parse table i of
   S [] [] [[o']] Success ->

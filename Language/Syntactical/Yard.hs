@@ -25,6 +25,7 @@ data Tree = Node [Tree]
            | Num Int
            | Sym String
            | Op [String] -- on the stack, TODO turn into Sym on the output
+  deriving Eq
 
 data Op = Infix [String] [String] Associativity Precedence -- infix
         | Prefix [String] [String] Precedence -- prefix
