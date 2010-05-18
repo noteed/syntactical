@@ -33,29 +33,28 @@ offsideMany1 p = do
 data Tree =
     Sym String
   | Let [Stride] Stride
-  | L
-  | R
   deriving Show
 
 data Stride = Stride [Tree]
   deriving Show
 
-symStrides [s] = symStride s
-symStrides (s:ss) = symStride s . (Sym "SEP" :) . symStrides ss
+flatten :: [Stride] -> [String] -> [String]
+flatten = symStrides
+  where
+    symStrides [s] = symStride s
+    symStrides (s:ss) = symStride s . (";" :) . symStrides ss
 
-symStride (Stride ts) = symTrees ts
+    symStride (Stride ts) = symTrees ts
 
-symTrees [] = id
-symTrees (t:ts) = symTree t . symTrees ts
+    symTrees [] = id
+    symTrees (t:ts) = symTree t . symTrees ts
 
-symTree (Sym x) = (Sym x :)
-symTree (Let ss s) =
-  (\a -> Sym "let" : Sym "BEGIN" : a) .
-  symStrides ss .
-  (\a -> Sym "END" : Sym "in" : a) .
-  symStride s
-symTree L = (L :)
-symTree R = (R :)
+    symTree (Sym x) = (x :)
+    symTree (Let ss s) =
+      (\a -> "let" : "{" : a) .
+      symStrides ss .
+      (\a -> "}" : "in" : a) .
+      symStride s
 
 keywords = words "let in"
 
@@ -73,9 +72,9 @@ letin = try $ do
   s <- parseStride
   return $ Let b s
 
-lparen = char '(' >> spaces >> return L
+lparen = char '(' >> spaces >> return (Sym "(")
 
-rparen = char ')' >> spaces >> return R
+rparen = char ')' >> spaces >> return (Sym ")")
 
 parseTree pos = offside pos (atom <|> letin <|> lparen <|> rparen)
 
