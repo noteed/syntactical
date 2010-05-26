@@ -33,6 +33,7 @@ offsideMany1 p = do
 data Tree =
     Sym String
   | Let [Stride] Stride
+  | Where [Stride] -- not e1 where e2 ; en
   deriving Show
 
 data Stride = Stride [Tree]
@@ -55,8 +56,12 @@ flatten = symStrides
       symStrides ss .
       (\a -> "}" : "in" : a) .
       symStride s
+    symTree (Where ss) =
+      (\a -> "where" : "{" : a) .
+      symStrides ss .
+      ("}" :)
 
-keywords = words "let in"
+keywords = words "let in where"
 
 atom = try $ do
   x <- many1 alphaNum
@@ -68,15 +73,19 @@ letin = try $ do
   b <- parseBlock
   (il,ic) <- getPos
   string "in" >> spaces
-  unless (il == ll || ic == lc) $ fail "let-in not aligned"
   s <- parseStride
   return $ Let b s
+
+wher = try $ do
+  string "where" >> spaces
+  b <- parseBlock
+  return $ Where b
 
 lparen = char '(' >> spaces >> return (Sym "(")
 
 rparen = char ')' >> spaces >> return (Sym ")")
 
-parseTree pos = offside pos (atom <|> letin <|> lparen <|> rparen)
+parseTree pos = offside pos (atom <|> letin <|> wher <|> lparen <|> rparen)
 
 parseStride = getPos >>= many1 . parseTree >>= return . Stride
 
