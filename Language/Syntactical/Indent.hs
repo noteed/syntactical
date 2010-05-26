@@ -34,6 +34,7 @@ data Tree =
     Sym String
   | Let [Stride] Stride
   | Where [Stride] -- not e1 where e2 ; en
+  | Case Stride [Stride]
   deriving Show
 
 data Stride = Stride [Tree]
@@ -60,8 +61,14 @@ flatten = symStrides
       (\a -> "where" : "{" : a) .
       symStrides ss .
       ("}" :)
+    symTree (Case s ss) =
+      ("case" :) .
+      symStride s .
+      (\a -> "of" : "{" : a) .
+      symStrides ss .
+      ("}" :)
 
-keywords = words "let in where"
+keywords = words "let in where case of"
 
 sym = try $ do
   x <- noneOf "\t\n "
@@ -70,6 +77,13 @@ sym = try $ do
     else do
       xs <- manyTill anyChar (lookAhead $ (oneOf ",()⟨⟩\t\n " >> return ()) <|> eof)
       if (x:xs) `elem` keywords then pzero else spaces >> return (Sym $ x:xs)
+
+str = try $ do
+  _ <- char '"'
+  x <- many (noneOf "\t\n\"")
+  _ <- char '"'
+  spaces
+  return $ Sym ('"' : x ++ "\"")
 
 letin = try $ do
   (ll,lc) <- getPos
@@ -80,12 +94,20 @@ letin = try $ do
   s <- parseStride
   return $ Let b s
 
+caseof = try $ do
+  (ll,lc) <- getPos
+  string "case" >> spaces
+  s <- parseStride
+  string "of" >> spaces
+  b <- parseBlock
+  return $ Case s b
+
 wher = try $ do
   string "where" >> spaces
   b <- parseBlock
   return $ Where b
 
-parseTree pos = offside pos (sym <|> letin <|> wher)
+parseTree pos = offside pos (str <|> sym <|> letin <|> wher <|> caseof)
 
 parseStride = getPos >>= many1 . parseTree >>= return . Stride
 

@@ -123,6 +123,8 @@ step' table sh = case sh of
       ([o1@(Prefix l1 r1 _)], [o2@(Prefix l2 (r2:r2s) _)])
         | l2++[r2] == l1 ->
           S ts      (Op l1:ss)            oss          StackOp
+      ([o1@(Prefix [_] _ _)], [o2@(Prefix _ [] _)]) ->
+          S ts      (Op [x]:s:ss)         oss          StackOp
       ([o1@(Postfix [_] [] p1)], [o2@(Prefix [_] [] p2)])
         | p1 > p2 ->
           S ts      (Op [x]:s:ss)         oss          StackOp

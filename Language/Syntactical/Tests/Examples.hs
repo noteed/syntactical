@@ -28,6 +28,7 @@ table0 = Table
  , Infix [] ["="] NonAssociative (-1)
  , Prefix [] ["let","in"] 0
  , Infix [] ["where"] RightAssociative 0
+ , Prefix [] ["case","of"] 0
  ]
 
 -- [(input, expected output)]
@@ -144,6 +145,9 @@ testsTable0 = [
   , ("a = let { b = c ; f = g } in b ; d = e",
      "⟨; ⟨= a ⟨letin ⟨{} ⟨; ⟨= b c⟩ ⟨= f g⟩⟩⟩ b⟩⟩ ⟨= d e⟩⟩")
   , ("a = b where { c } ; d", "⟨; ⟨= a ⟨where b ⟨{} c⟩⟩⟩ d⟩")
+
+  , ("f a b = let { c } in case d of { e }",
+     "⟨= ⟨f a b⟩ ⟨letin ⟨{} c⟩ ⟨caseof d ⟨{} e⟩⟩⟩⟩")
   ]
 
 checkTable0 = checkTests table0 testsTable0
@@ -178,6 +182,6 @@ separate' ('⟩':cs) = " ⟩ " ++ separate' cs
 separate' (c:cs) = c : separate' cs
 separate' [] = []
 
-token (c:cs) | c `elem` ['a'..'z'] ++ "()⟨⟩+-*/?:#i°%!<>[]|,{};=" = Sym (c:cs)
+token (c:cs) | c `elem` ['a'..'z'] ++ "()⟨⟩+-*/?:#i°%!<>[]|,{};=\"" = Sym (c:cs)
              | otherwise = Num (read [c])
 
