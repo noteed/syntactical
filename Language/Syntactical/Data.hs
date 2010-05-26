@@ -42,6 +42,8 @@ display = tail . display'
 associativity (Infix _ _ a _) = a
 
 prec (Infix _ _ _ p) = p
+prec (Prefix _ _ p) = p
+prec (Postfix _ _ p) = p
 
 nonAssoc = (NonAssociative ==) . associativity
 lAssoc = (LeftAssociative ==) . associativity
@@ -54,8 +56,15 @@ isInfix' (Infix xs _ _ _) ys = xs == ys
 isInfix' _ _ = False
 
 lower o1@(Infix [_] _ _ _) o2@(Infix _ [] _ _)
-    | nonAssoc o1 || (lAssoc o1 && prec o1 <= prec o2) = True
+    | nonAssoc o1 && nonAssoc o2 = error "cannot mix"
+    | lAssoc o1 && prec o1 <= prec o2 = True
     | rAssoc o1 && prec o1 < prec o2 = True
+    | nonAssoc o1 && prec o1 <= prec o2 = True
+lower o1@(Infix [_] _ _ _) o2@(Prefix _ [] _)
+    | nonAssoc o1 && nonAssoc o2 = error "cannot mix"
+    | lAssoc o1 && prec o1 <= prec o2 = True
+    | rAssoc o1 && prec o1 < prec o2 = True
+    | nonAssoc o1 && prec o1 <= prec o2 = True
 lower _ _ = False
 
 findOp op (Table t) = findOp' op t

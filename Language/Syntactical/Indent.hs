@@ -63,9 +63,13 @@ flatten = symStrides
 
 keywords = words "let in where"
 
-atom = try $ do
-  x <- many1 alphaNum
-  if x `elem` keywords then pzero else spaces >> return (Sym x)
+sym = try $ do
+  x <- noneOf "\t\n "
+  if x `elem` "()⟨⟩"
+    then spaces >> return (Sym [x])
+    else do
+      xs <- manyTill anyChar (lookAhead $ (oneOf ",()⟨⟩\t\n " >> return ()) <|> eof)
+      if (x:xs) `elem` keywords then pzero else spaces >> return (Sym $ x:xs)
 
 letin = try $ do
   (ll,lc) <- getPos
@@ -81,11 +85,7 @@ wher = try $ do
   b <- parseBlock
   return $ Where b
 
-lparen = char '(' >> spaces >> return (Sym "(")
-
-rparen = char ')' >> spaces >> return (Sym ")")
-
-parseTree pos = offside pos (atom <|> letin <|> wher <|> lparen <|> rparen)
+parseTree pos = offside pos (sym <|> letin <|> wher)
 
 parseStride = getPos >>= many1 . parseTree >>= return . Stride
 

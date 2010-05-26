@@ -112,17 +112,10 @@ step' table sh = case sh of
       ([o1@(Infix l1 r1 _ _)], [o2@(Infix l2 (r2:r2s) _ _)])
         | l2++[r2] == l1 ->
           S ts      (Op l1:ss)            oss          StackOp
-      ([o1@(Infix [_] _ _ _)], [o2@(Infix _ [] _ _)])
-        | o1 `lower` o2 ->
-          -- TODO possibly flush more ops
-          S ts      (Op [x]:ss)           (apply table s oss) StackOp
-        | otherwise ->
-          S ts      (Op [x]:s:ss)         oss          StackOp
-      ([o1@(Infix _ _ _ p1)], [o2@(Prefix _ _ p2)])
-        | p1 > p2 ->
-          S ts      (Op [x]:s:ss)         oss          StackOp
-        | p1 < p2 ->
-          S ts      (Op [x]:ss)           (apply table s oss) StackOp
+      ([o1@(Infix [_] _ _ _)], [o2@(Infix _ [] _ _)]) ->
+        flushLower table o1 x ts (s:ss) oss
+      ([o1@(Infix _ _ _ p1)], [o2@(Prefix _ _ p2)]) ->
+        flushLower table o1 x ts (s:ss) oss
       ([o1@(Prefix [_] _ _)], [o2@(Infix [_] _ _ _)]) ->
           S ts      (Op [x]:s:ss)         oss          StackOp
       ([o1@(Prefix [_] [] _)], [o2@(Prefix [_] [] _)]) ->
@@ -219,7 +212,7 @@ step' table sh = case sh of
   _ -> sh { rule = Unexpected }
 
 flushLower table o1 x ts (s@(Op y):ss) oss = case findOps y table of
-  [o2@(Infix [_] [] _ _)]
+  [o2]
     | o1 `lower` o2 ->
       flushLower table o1 x ts ss (apply table s oss)
     | otherwise ->

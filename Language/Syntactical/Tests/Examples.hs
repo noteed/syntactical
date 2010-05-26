@@ -19,10 +19,15 @@ table0 = Table
  , Postfix [] ["°"] 7
  , Postfix [] ["%"] 8
  , Postfix [] ["!"] 9
- , Prefix [] ["if","then","else"] 1
+ , Prefix [] ["if","then","else"] 3
  , Closed [] ["</","/>"] Keep
  , Closed [] ["[","|","]"] Keep
- , Infix [] [","] RightAssociative 1
+ , Infix [] [","] RightAssociative 2
+ , Closed [] ["{","}"] Keep
+ , Infix [] [";"] RightAssociative (-2)
+ , Infix [] ["="] NonAssociative (-1)
+ , Prefix [] ["let","in"] 0
+ , Infix [] ["where"] RightAssociative 0
  ]
 
 -- [(input, expected output)]
@@ -130,11 +135,22 @@ testsTable0 = [
   , ("f </ a + b />","⟨f ⟨<//> ⟨+ a b⟩⟩⟩")
 
   , ("[ a | b ]","⟨[|] a b⟩")
+
+  , ("a = b ; c = d", "⟨; ⟨= a b⟩ ⟨= c d⟩⟩")
+  , ("a = let { b = c } in b", "⟨= a ⟨letin ⟨{} ⟨= b c⟩⟩ b⟩⟩")
+  , ("a = let { b } in b ; d", "⟨; ⟨= a ⟨letin ⟨{} b⟩ b⟩⟩ d⟩")
+  , ("a = let { b = c } in b ; d = e",
+     "⟨; ⟨= a ⟨letin ⟨{} ⟨= b c⟩⟩ b⟩⟩ ⟨= d e⟩⟩")
+  , ("a = let { b = c ; f = g } in b ; d = e",
+     "⟨; ⟨= a ⟨letin ⟨{} ⟨; ⟨= b c⟩ ⟨= f g⟩⟩⟩ b⟩⟩ ⟨= d e⟩⟩")
+  , ("a = b where { c } ; d", "⟨; ⟨= a ⟨where b ⟨{} c⟩⟩⟩ d⟩")
   ]
 
 checkTable0 = checkTests table0 testsTable0
 
 parse0 = shunt table0 . tokenize
+
+steps0 = steps table0 . tokenize
 
 checkTests table l = mapM_ (check table) l
 
@@ -162,6 +178,6 @@ separate' ('⟩':cs) = " ⟩ " ++ separate' cs
 separate' (c:cs) = c : separate' cs
 separate' [] = []
 
-token (c:cs) | c `elem` ['a'..'z'] ++ "()⟨⟩+-*/?:#i°%!<>[]|," = Sym (c:cs)
+token (c:cs) | c `elem` ['a'..'z'] ++ "()⟨⟩+-*/?:#i°%!<>[]|,{};=" = Sym (c:cs)
              | otherwise = Num (read [c])
 
