@@ -1,7 +1,6 @@
 module Language.Syntactical.Tests.Examples where
 
-import Language.Syntactical.Data
-import Language.Syntactical.Yard
+import Language.Syntactical
 
 table0 :: Table
 table0 = Table

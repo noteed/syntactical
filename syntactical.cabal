@@ -51,9 +51,10 @@ Library
   Exposed-modules:     Language.Syntactical.Data,
                        Language.Syntactical.Indent,
                        Language.Syntactical.Yard
+                       Language.Syntactical
   
   -- Packages needed in order to build this package.
-  Build-depends:    base, parsec
+  Build-depends:    base >= 4.0, parsec
   
   -- Modules not exported by this package.
   -- Other-modules:       
