@@ -36,16 +36,32 @@ data Rule = Initial
           | StackOp    -- push a new operator part to the stack
           | ContinueOp -- append an operator part to the operator
                        -- at the top of the stack
-          | UnmatchedL -- TODO have some error states
-          | UnmatchedR -- TODO have some error states
           | MatchedR   -- handle the last part of a closed operator
           | SExpr      -- build an s-expression
-          | Success    -- everything is successfuly parsed
-          | Unexpected -- unexpected state (can't happen, this is a bug)
+          | Done Done
   deriving (Show, Eq)
 
-isDone sh = elem (rule sh)
-  [Success, UnmatchedL, UnmatchedR, Unexpected]
+data Done =
+    Success    -- everything is successfuly parsed
+  | UnmatchedL -- TODO have some error states
+  | UnmatchedR -- TODO have some error states
+  | NotFirst String -- error case: the operator part appears on
+                    -- the input but its prefix hasn't been seen
+  | CantMix Op Op -- error case: can't mix two operators
+  | Unexpected -- unexpected state (can't happen, this is a bug)
+  deriving (Eq, Show)
+
+isDone sh = case rule sh of
+  Done _ -> True
+  _ -> False
+
+showDone d = case d of
+  Success -> "Parsing successful"
+  UnmatchedL -> "Parse error: missing operator suffix"
+  UnmatchedR -> "Parse error: missing operator prefix"
+  NotFirst _ -> "Parse error: missing operator prefix"
+  CantMix _ _ -> "Parse error: cannot mix operators"
+  Unexpected -> "Parsing raised a bug"
 
 data Shunt = S {
     input :: [Tree]    -- list of token (Nodes can be pushed back.)
@@ -74,8 +90,8 @@ isRight (Right a) = True
 isRight _ = False
 
 shunt table ts = case fix $ initial ts of
-  S [] [] [[o']] Success -> Right o'
-  _ -> Left "TODO error message"
+  S [] [] [[o']] (Done Success) -> Right o'
+  s -> Left s
   where fix s = let s' = step table s in
                 if isDone s' then s' else fix s'
 
@@ -136,7 +152,7 @@ step' table sh = case sh of
           S ts      (Op [x]:s:ss)         oss          StackOp
         | p1 < p2 ->
           S ts      (Op [x]:ss)           (apply table s oss) StackOp
-        | otherwise -> error $ "precedence cannot be mixed: " ++ show t ++ ", " ++ show s
+        | otherwise ->  S (t:ts) (s:ss) oss (Done $ CantMix o1 o2)
       ([o1@(Closed [_] _ SExpression)], _) ->
         S ts        (Op [x]:s:ss)         ([]:os:oss')        StackOp
         where (os:oss') = oss
@@ -171,7 +187,8 @@ step' table sh = case sh of
           S (t:ts)            ss                  (apply table s oss) FlushOp
       ([o1@(Closed _ _ _)], [_]) ->
           S ts      (Op [x]:s:ss)           oss StackOp
-      _ -> error $ "TODO: " ++ show t ++ ", " ++ show s
+      _ -> error $ "TODO: This is a bug: the patterns should be exhaustive but" ++
+             "(" ++ show t ++ ", " ++ show s ++ ") is not matched."
 
   S   (t@(Sym x):ts) (s@(Node _):ss)   (os:oss)              _ ->
     case findOp x table of
@@ -183,9 +200,7 @@ step' table sh = case sh of
       [] -> S ts       (t:ss)              ([]:os:oss)             StackApp
       -- x is the first sub-op, and the stack is empty or has a left bracket at its top.
       _ -> case findOps [x] table of
-        [] -> error $ "using middle sub-op " ++ x ++ " as first sub-op." ++
-                      "\nstack: " ++ show ss ++
-                      "\noutput: " ++ show (os:oss)
+        [] -> S (t:ts) ss                  (os:oss)                (Done $ NotFirst x)
         [Closed [_] _ SExpression] -> S ts   (Op [x]:ss) ([]:os:oss)           StackOp
         _ -> S ts      (Op [x]:ss)  (os:oss)  StackOp
 
@@ -215,9 +230,9 @@ step' table sh = case sh of
     S []                ss                  (apply table s oss)            FlushApp
 
   S   []                []                  [[o]]           _ ->
-    S []                []                  [[o]]                    Success
+    S []                []                  [[o]]                    (Done Success)
 
-  _ -> sh { rule = Unexpected }
+  _ -> sh { rule = Done Unexpected }
 
 flushLower table o1 x ts (s@(Op y):ss) oss = case findOps y table of
   [o2]

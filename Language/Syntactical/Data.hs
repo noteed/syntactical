@@ -17,7 +17,7 @@ data Op = Infix [String] [String] Associativity Precedence
         | Prefix [String] [String] Precedence
         | Postfix [String] [String] Precedence
         | Closed [String] [String] Kind
-  deriving Show
+  deriving (Eq, Show)
 
 -- The Kind is used to give various behaviours when dealing
 -- with Closed operators.
@@ -31,7 +31,7 @@ data Op = Infix [String] [String] Associativity Precedence
 -- DistfixAndDiscard combines the meaning of both Discard and
 -- Distfix.
 data Kind = Discard | Keep | SExpression | Distfix | DistfixAndDiscard
-  deriving Show
+  deriving (Eq, Show)
 
 data Associativity = NonAssociative | LeftAssociative | RightAssociative
   deriving (Show, Eq)
