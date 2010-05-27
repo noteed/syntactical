@@ -6,18 +6,30 @@ data Tree = Node [Tree]
 -- The to-be-shunted tokens. Only the information for the
 -- shunting yard algorithm is represented. Actual tokens should
 -- be converted to this representation.
+-- TODO if the above is true, then algorithm should return the
+-- original data instead of a Tree.
            | Num Int
            | Sym String
            | Op [String] -- on the stack, TODO turn into Sym on the output
   deriving Eq
 
-data Op = Infix [String] [String] Associativity Precedence -- infix
-        | Prefix [String] [String] Precedence -- prefix
-        | Postfix [String] [String] Precedence -- postfix
+data Op = Infix [String] [String] Associativity Precedence
+        | Prefix [String] [String] Precedence
+        | Postfix [String] [String] Precedence
         | Closed [String] [String] Kind
-        -- TODO SExpression so the user can choose the brackets for s-expr
   deriving Show
 
+-- The Kind is used to give various behaviours when dealing
+-- with Closed operators.
+-- Discard means the Closed operator will be removed from the
+-- resulting Tree.
+-- Keep is the opposite of Discard.
+-- SExpression means the 'content' of the Closed operator
+-- should be parsed as an s-expression.
+-- Distfix means the 'content' of the Closed operator
+-- should be parsed as a distfix expression.
+-- DistfixAndDiscard combines the meaning of both Discard and
+-- Distfix.
 data Kind = Discard | Keep | SExpression | Distfix | DistfixAndDiscard
   deriving Show
 
