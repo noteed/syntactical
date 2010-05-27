@@ -2,30 +2,34 @@ module Language.Syntactical.Indent where
 
 import Text.ParserCombinators.Parsec
 import Control.Monad (unless)
-import Data.List (intersperse)
 
 -- indentation handling
 
 type Pos = (Int,Int)
 
+getPos :: GenParser Char st Pos
 getPos = do
   p <- getPosition
   let l = sourceLine p
       c = sourceColumn p
   return (l,c)
 
+onside :: Pos -> Pos -> Bool
 onside (l1,c1) (l2,c2) = c1 < c2 || l1 == l2
 
+offside :: Pos -> GenParser Char st a -> GenParser Char st a
 offside pos p = do
   pos' <- getPos
   unless (onside pos pos') pzero
   p
 
+off :: Pos -> GenParser Char st a -> GenParser Char st a
 off (_,dc) p = do
   (_,c) <- getPos
   unless (c == dc) pzero
   p
 
+offsideMany1 :: GenParser Char st a -> GenParser Char st [a]
 offsideMany1 p = do
   pos <- getPos
   many1 (off pos p)
@@ -68,8 +72,10 @@ flatten = symStrides
       symStrides ss .
       ("}" :)
 
+keywords :: [String]
 keywords = words "let in where case of"
 
+sym :: GenParser Char st Tree
 sym = try $ do
   x <- noneOf "\t\n "
   if x `elem` "()⟨⟩"
@@ -78,6 +84,7 @@ sym = try $ do
       xs <- manyTill anyChar (lookAhead $ (oneOf ",()⟨⟩\t\n " >> return ()) <|> eof)
       if (x:xs) `elem` keywords then pzero else spaces >> return (Sym $ x:xs)
 
+str :: GenParser Char st Tree
 str = try $ do
   _ <- char '"'
   x <- many (noneOf "\t\n\"")
@@ -85,35 +92,40 @@ str = try $ do
   spaces
   return $ Sym ('"' : x ++ "\"")
 
+letin :: GenParser Char st Tree
 letin = try $ do
-  (ll,lc) <- getPos
   string "let" >> spaces
   b <- parseBlock
-  (il,ic) <- getPos
   string "in" >> spaces
   s <- parseStride
   return $ Let b s
 
+caseof :: GenParser Char st Tree
 caseof = try $ do
-  (ll,lc) <- getPos
   string "case" >> spaces
   s <- parseStride
   string "of" >> spaces
   b <- parseBlock
   return $ Case s b
 
+wher :: GenParser Char st Tree
 wher = try $ do
   string "where" >> spaces
   b <- parseBlock
   return $ Where b
 
+parseTree :: Pos -> GenParser Char st Tree
 parseTree pos = offside pos (str <|> sym <|> letin <|> wher <|> caseof)
 
+parseStride :: GenParser Char st Stride
 parseStride = getPos >>= many1 . parseTree >>= return . Stride
 
+parseBlock :: GenParser Char st [Stride]
 parseBlock = offsideMany1 parseStride
 
+go :: [Char] -> Either ParseError Stride
 go = parse (spaces >> parseStride) "parseStride"
 
+go' :: [Char] -> Either ParseError [Stride]
 go' = parse (spaces >> parseBlock) "parseBlock"
 

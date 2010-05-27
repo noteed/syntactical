@@ -51,22 +51,32 @@ display = tail . display'
   display' (Op l) = ' ' : concat l
   display' (Node es) = ' ' : '⟨' : tail (concatMap display' es) ++ "⟩"
 
+associativity :: Op -> Associativity
 associativity (Infix _ _ a _) = a
 
+prec :: Op -> Precedence
 prec (Infix _ _ _ p) = p
 prec (Prefix _ _ p) = p
 prec (Postfix _ _ p) = p
 
+nonAssoc :: Op -> Bool
 nonAssoc = (NonAssociative ==) . associativity
+
+lAssoc :: Op -> Bool
 lAssoc = (LeftAssociative ==) . associativity
+
+rAssoc :: Op -> Bool
 rAssoc = (RightAssociative ==) . associativity
 
+isInfix :: Op -> Bool
 isInfix (Infix _ _ _ _) = True
 isInfix _ = False
 
+isInfix' :: Op -> [String] -> Bool
 isInfix' (Infix xs _ _ _) ys = xs == ys
 isInfix' _ _ = False
 
+lower :: Op -> Op -> Bool
 lower o1@(Infix [_] _ _ _) o2@(Infix _ [] _ _)
     | nonAssoc o1 && nonAssoc o2 = error "cannot mix"
     | lAssoc o1 && prec o1 <= prec o2 = True
@@ -79,9 +89,11 @@ lower o1@(Infix [_] _ _ _) o2@(Prefix _ [] _)
     | nonAssoc o1 && prec o1 <= prec o2 = True
 lower _ _ = False
 
+findOp :: String -> Table -> [Op]
 findOp op (Table t) = findOp' op t
 
-findOp' op [] = []
+findOp' :: String -> [Op] -> [Op]
+findOp' _ [] = []
 findOp' op (Infix [] parts a p:xs)
   | op `elem` parts =
      let (l,r) = break' (== op) parts
@@ -103,9 +115,11 @@ findOp' op (Closed [] parts k:xs)
      in Closed l r k : findOp' op xs
   | otherwise = findOp' op xs
 
+findOps :: [String] -> Table -> [Op]
 findOps ops (Table t) = findOps' ops t
 
-findOps' ops [] = []
+findOps' :: [String] -> [Op] -> [Op]
+findOps' _ [] = []
 findOps' ops (Infix [] parts a p:xs)
   | ops `isPrefixOf` parts = Infix ops (drop (length ops) parts) a p : findOps' ops xs
   | otherwise = findOps' ops xs
@@ -119,6 +133,7 @@ findOps' ops (Closed [] parts k:xs)
   | ops `isPrefixOf` parts = Closed ops (drop (length ops) parts) k : findOps' ops xs
   | otherwise = findOps' ops xs
 
+break' :: (a -> Bool) -> [a] -> ([a], [a])
 break' p ls = case break p ls of
   (_, []) -> error "break': no element in l satisfying p"
   (l, r) -> (l ++ [head r], tail r)

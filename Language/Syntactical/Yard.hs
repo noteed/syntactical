@@ -16,8 +16,6 @@
 
 module Language.Syntactical.Yard where
 
-import Data.List
-
 import Language.Syntactical.Data
 
 -- An applicator is a non-operator symbol that is applied
@@ -51,10 +49,12 @@ data Done =
   | Unexpected -- unexpected state (can't happen, this is a bug)
   deriving (Eq, Show)
 
+isDone :: Shunt -> Bool
 isDone sh = case rule sh of
   Done _ -> True
   _ -> False
 
+showDone :: Done -> [Char]
 showDone d = case d of
   Success -> "Parsing successful"
   UnmatchedL -> "Parse error: missing operator suffix"
@@ -74,21 +74,28 @@ instance Show Shunt where
   show (S ts ss os r) =
     pad 20 ts ++ pad 20 ss ++ pad 20 os ++ "   " ++ show r
 
+pad :: Show a => Int -> a -> [Char]
 pad n s = let s' = show s in replicate (n - length s') ' ' ++ s'
 
+steps :: Table -> [Tree] -> IO ()
 steps table ts = do
   putStrLn $ "               Input               Stack              Output   Rule"
   let sh = iterate (step table) $ initial ts
   let l = length $ takeWhile (not . isDone) sh
   mapM_ (putStrLn . show) (take (l + 1) sh)
 
+initial :: [Tree] -> Shunt
 initial ts = S ts [] [[]] Initial
 
-isLeft (Left a) = True
+isLeft :: Either a b -> Bool
+isLeft (Left _) = True
 isLeft _ = False
-isRight (Right a) = True
+
+isRight :: Either a b -> Bool
+isRight (Right _) = True
 isRight _ = False
 
+shunt :: Table -> [Tree] -> Either Shunt Tree
 shunt table ts = case fix $ initial ts of
   S [] [] [[o']] (Done Success) -> Right o'
   s -> Left s
@@ -105,6 +112,7 @@ step table sh = case sh of
       _ -> step' table sh
   _ -> step' table sh
 
+step' :: Table -> Shunt -> Shunt
 step' table sh = case sh of
 
   S   (t@(Num _):ts)    ss                  (os:oss)                _ ->
@@ -120,31 +128,31 @@ step' table sh = case sh of
 
   S   (t@(Sym x):ts) (s@(Op y):ss) oss      _ ->
     case (findOp x table, findOps y table) of
-      ([],[o2@(Closed [_] _ SExpression)]) ->
+      ([],[Closed [_] _ SExpression]) ->
         S ts            (s:ss)              ((t:os):oss')        SExpr
         where (os:oss') = oss
       ([], _) -> S ts   (t:s:ss)            ([]:oss)             StackApp
-      ([Closed [_] _ DistfixAndDiscard],[o2@(Closed [_] _ SExpression)]) ->
+      ([Closed [_] _ DistfixAndDiscard],[Closed [_] _ SExpression]) ->
         S ts            (Op [x]:s:ss)       (os:oss')            StackOp
         where (os:oss') = oss
-      ([Closed [_] _ Distfix],[o2@(Closed [_] _ SExpression)]) ->
+      ([Closed [_] _ Distfix],[Closed [_] _ SExpression]) ->
         S ts            (Op [x]:s:ss)       (os:oss')            StackOp
         where (os:oss') = oss
-      ([o1@(Infix [_] [] _ _)], [o2@(Infix [_] [] _ _)]) ->
+      ([o1@(Infix [_] [] _ _)], [Infix [_] [] _ _]) ->
         flushLower table o1 x ts (s:ss) oss
-      ([o1@(Infix l1 r1 _ _)], [o2@(Infix l2 (r2:r2s) _ _)])
+      ([Infix l1 _ _ _], [Infix l2 (r2:_) _ _])
         | l2++[r2] == l1 ->
           S ts      (Op l1:ss)            oss          ContinueOp
-      ([o1@(Infix [_] _ _ _)], [o2@(Infix _ [] _ _)]) ->
+      ([o1@(Infix [_] _ _ _)], [Infix _ [] _ _]) ->
         flushLower table o1 x ts (s:ss) oss
-      ([o1@(Infix _ _ _ p1)], [o2@(Prefix _ _ p2)]) ->
+      ([o1@(Infix _ _ _ _)], [Prefix _ _ _]) ->
         flushLower table o1 x ts (s:ss) oss
-      ([o1@(Prefix [_] _ _)], [o2@(Infix [_] _ _ _)]) ->
+      ([Prefix [_] _ _], [Infix [_] _ _ _]) ->
           S ts      (Op [x]:s:ss)         oss          StackOp
-      ([o1@(Prefix l1 r1 _)], [o2@(Prefix l2 (r2:r2s) _)])
+      ([Prefix l1 _ _], [Prefix l2 (r2:_) _])
         | l2++[r2] == l1 ->
           S ts      (Op l1:ss)            oss          ContinueOp
-      ([o1@(Prefix [_] _ _)], [o2@(Prefix _ [] _)]) ->
+      ([Prefix [_] _ _], [Prefix _ [] _]) ->
           S ts      (Op [x]:s:ss)         oss          StackOp
       ([o1@(Postfix [_] [] p1)], [o2@(Prefix [_] [] p2)])
         -- TODO use flushLower ?
@@ -153,39 +161,39 @@ step' table sh = case sh of
         | p1 < p2 ->
           S ts      (Op [x]:ss)           (apply table s oss) StackOp
         | otherwise ->  S (t:ts) (s:ss) oss (Done $ CantMix o1 o2)
-      ([o1@(Closed [_] _ SExpression)], _) ->
+      ([Closed [_] _ SExpression], _) ->
         S ts        (Op [x]:s:ss)         ([]:os:oss')        StackOp
         where (os:oss') = oss
 
-      ([o1@(Closed l1 [] Discard)], [o2@(Closed l2 [r2] Discard)])
+      ([Closed l1 [] Discard], [Closed l2 [r2] Discard])
         | l2++[r2] == l1 ->
          S (o:ts)           ss             (os:oss')             MatchedR
          where ((o:os):oss') = oss
-      ([o1@(Closed l1 [] DistfixAndDiscard)], [o2@(Closed l2 [r2] DistfixAndDiscard)])
+      ([Closed l1 [] DistfixAndDiscard], [Closed l2 [r2] DistfixAndDiscard])
         | l2++[r2] == l1 ->
          S (o:ts)           ss             (os:oss')             MatchedR
          where ((o:os):oss') = oss
-      ([o1@(Closed l1 [] SExpression)], [o2@(Closed l2 [r2] SExpression)])
+      ([Closed l1 [] SExpression], [Closed l2 [r2] SExpression])
         | l2++[r2] == l1 ->
           S ts                ss                  ((ap:h):oss')           MatchedR
           where (os:h:oss') = oss
                 ap = Node (reverse os)
 
-      ([o1@(Closed l1 [] _)], [o2@(Closed l2 [r2] _)])
+      ([Closed l1 [] _], [Closed l2 [r2] _])
         | l2++[r2] == l1 ->
           S (o:ts)           ss       (os:oss')      MatchedR
           where ((o:os):oss') = apply table (Op l1) oss
-      ([o1@(Closed l1 r1 _)], [o2@(Closed l2 (r2:r2s) _)])
+      ([Closed l1 _ _], [Closed l2 (r2:_) _])
         | l2++[r2] == l1 ->
           S ts      (Op l1:ss)            oss          ContinueOp
-      (_,[o2@(Closed [_] _ SExpression)]) ->
+      (_,[Closed [_] _ SExpression]) ->
         S ts                (s:ss)              ((t:os):oss')           SExpr
         where (os:oss') = oss
-      ([o1], [o2@(Closed _ _ _)]) ->
+      ([_], [Closed _ _ _]) ->
           S ts      (Op [x]:s:ss)         oss          StackOp
-      ([o1@(Closed _ [] _)], [_]) ->
+      ([Closed _ [] _], [_]) ->
           S (t:ts)            ss                  (apply table s oss) FlushOp
-      ([o1@(Closed _ _ _)], [_]) ->
+      ([Closed _ _ _], [_]) ->
           S ts      (Op [x]:s:ss)           oss StackOp
       _ -> error $ "TODO: This is a bug: the patterns should be exhaustive but" ++
              "(" ++ show t ++ ", " ++ show s ++ ") is not matched."
@@ -206,7 +214,7 @@ step' table sh = case sh of
 
   S   (t@(Node _):ts) (s@(Op y):ss)       (os:oss)               _ ->
     case findOps y table of
-      [o2@(Closed [_] _ SExpression)] ->
+      [Closed [_] _ SExpression] ->
         S ts              (s:ss)              ((t:os):oss)         SExpr
       _ ->
         S ts              (t:s:ss)            ([]:os:oss)          StackApp
@@ -234,15 +242,17 @@ step' table sh = case sh of
 
   _ -> sh { rule = Done Unexpected }
 
+flushLower :: Table -> Op -> String -> [Tree] -> [Tree] -> [[Tree]] -> Shunt
 flushLower table o1 x ts (s@(Op y):ss) oss = case findOps y table of
   [o2]
     | o1 `lower` o2 ->
       flushLower table o1 x ts ss (apply table s oss)
     | otherwise ->
       S ts (Op [x]:s:ss) oss FlushOp
-flushLower table o1 x ts ss oss =
+flushLower _ _ x ts ss oss =
       S ts (Op [x]:ss)   oss StackOp
 
+apply :: Table -> Tree -> [[Tree]] -> [[Tree]]
 apply table s@(Op y) (os:oss) = (Node (s:reverse l) : r) : oss
   where nargs = case findOps y table of
           [Infix _ _ _ _] -> length y + 1
@@ -250,9 +260,9 @@ apply table s@(Op y) (os:oss) = (Node (s:reverse l) : r) : oss
           [_] -> length y
           [] -> error $ "bug: wrong use of apply: " ++ show y
         (l,r) = splitAt nargs os -- TODO test correct lenght of os
-apply table s@(Sym _) (os:h:oss) =  (ap:h):oss
+apply _ s@(Sym _) (os:h:oss) =  (ap:h):oss
   where ap = if null os then s else Node (s:reverse os)
-apply table s@(Node _) (os:h:oss) =  (ap:h):oss
+apply _ s@(Node _) (os:h:oss) =  (ap:h):oss
   where ap = if null os then s else Node (s:reverse os)
-apply table s oss = error $ "can't apply " ++ show s ++ " to " ++ show oss
+apply _ s oss = error $ "can't apply " ++ show s ++ " to " ++ show oss
 
