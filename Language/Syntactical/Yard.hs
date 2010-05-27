@@ -20,28 +20,35 @@ import Data.List
 
 import Language.Syntactical.Data
 
+-- An applicator is a non-operator symbol that is applied
+-- to some arguments. When such a symbol is read, it is
+-- placed on the (operator/applicator) stack. If there is
+-- already such a symbol on the stack, it goes straight
+-- to the output stack (this is the Inert case).
 data Rule = Initial
-          | Inert -- not an operator or an applicator
-          | Application
-          | FlushApp
-          | StackApp
-          | FlushOp
-          | StackOp
-          | StackL
-          | UnmatchedL
-          | UnmatchedR
-          | MatchedR
-          | SExpr
-          | Success
-          | Blocked
-          | Unexpected
+          | Inert      -- not an operator or an applicator, goes
+                       -- straight to the output stack
+          | MakeInert  -- apply and push on the the input stack
+          | Application -- apply an applicator
+          | FlushApp   -- apply an applicator
+          | StackApp   -- push an applicator to the stack
+          | FlushOp    -- apply an operator
+          | StackOp    -- push a new operator part to the stack
+          | ContinueOp -- append an operator part to the operator
+                       -- at the top of the stack
+          | UnmatchedL -- TODO have some error states
+          | UnmatchedR -- TODO have some error states
+          | MatchedR   -- handle the last part of a closed operator
+          | SExpr      -- build an s-expression
+          | Success    -- everything is successfuly parsed
+          | Unexpected -- unexpected state (can't happen, this is a bug)
   deriving (Show, Eq)
 
 isDone sh = elem (rule sh)
-  [Success, Blocked, UnmatchedL, UnmatchedR, Unexpected]
+  [Success, UnmatchedL, UnmatchedR, Unexpected]
 
 data Shunt = S {
-    input :: [Tree]    -- list of token (no Node)
+    input :: [Tree]    -- list of token (Nodes can be pushed back.)
   , stack :: [Tree]    -- stack of operators and applicators
   , output :: [[Tree]] -- stack of stacks
   , rule :: Rule
@@ -77,8 +84,8 @@ step table sh = case sh of
 
   S   ts                (s@(Op y):ss)      ([a]:oss) _ ->
     case findOps y table of
-      [Postfix _ [] _] -> S (Node [s,a]:ts)    ss           ([]:oss)       FlushApp
-      [Closed _ [] _] -> S (Node [s,a]:ts)    ss           ([]:oss)       FlushApp
+      [Postfix _ [] _] -> S (Node [s,a]:ts) ss ([]:oss) MakeInert
+      [Closed _ [] _] ->  S (Node [s,a]:ts) ss ([]:oss) MakeInert
       _ -> step' table sh
   _ -> step' table sh
 
@@ -89,50 +96,49 @@ step' table sh = case sh of
 
   S   (t@(Sym x):ts)    (s@(Sym _):ss)      (os:oss) _ ->
     case findOp x table of
-      [] -> S ts        (s:ss)              ((t:os):oss)          Application
-      [Prefix [_] _ _] -> S ts   (Op [x]:s:ss) (os:oss)           StackOp
-      [Closed [_] _ SExpression] -> S ts   (Op [x]:s:ss) ([]:os:oss)           StackOp
-      [Closed [_] _ _] -> S ts   (Op [x]:s:ss) (os:oss)           StackOp
-      _ ->  S (t:ts)    ss                  (apply table s $ os:oss)    FlushApp
+      [] -> S ts (s:ss) ((t:os):oss) Inert
+      [Prefix [_] _ _] ->           S ts (Op [x]:s:ss) (os:oss)    StackOp
+      [Closed [_] _ SExpression] -> S ts (Op [x]:s:ss) ([]:os:oss) StackOp
+      [Closed [_] _ _] ->           S ts (Op [x]:s:ss) (os:oss)    StackOp
+      _ -> S (t:ts) ss (apply table s $ os:oss) FlushApp
 
   S   (t@(Sym x):ts) (s@(Op y):ss) oss      _ ->
     case (findOp x table, findOps y table) of
       ([],[o2@(Closed [_] _ SExpression)]) ->
-        S ts                (s:ss)              ((t:os):oss')       SExpr
+        S ts            (s:ss)              ((t:os):oss')        SExpr
         where (os:oss') = oss
       ([], _) -> S ts   (t:s:ss)            ([]:oss)             StackApp
       ([Closed [_] _ DistfixAndDiscard],[o2@(Closed [_] _ SExpression)]) ->
-        S ts                (Op [x]:s:ss)       (os:oss')           StackApp
+        S ts            (Op [x]:s:ss)       (os:oss')            StackOp
         where (os:oss') = oss
       ([Closed [_] _ Distfix],[o2@(Closed [_] _ SExpression)]) ->
-        S ts                (Op [x]:s:ss)       (os:oss')           StackApp
+        S ts            (Op [x]:s:ss)       (os:oss')            StackOp
         where (os:oss') = oss
       ([o1@(Infix [_] [] _ _)], [o2@(Infix [_] [] _ _)]) ->
         flushLower table o1 x ts (s:ss) oss
       ([o1@(Infix l1 r1 _ _)], [o2@(Infix l2 (r2:r2s) _ _)])
         | l2++[r2] == l1 ->
-          S ts      (Op l1:ss)            oss          StackOp
+          S ts      (Op l1:ss)            oss          ContinueOp
       ([o1@(Infix [_] _ _ _)], [o2@(Infix _ [] _ _)]) ->
         flushLower table o1 x ts (s:ss) oss
       ([o1@(Infix _ _ _ p1)], [o2@(Prefix _ _ p2)]) ->
         flushLower table o1 x ts (s:ss) oss
       ([o1@(Prefix [_] _ _)], [o2@(Infix [_] _ _ _)]) ->
           S ts      (Op [x]:s:ss)         oss          StackOp
-      ([o1@(Prefix [_] [] _)], [o2@(Prefix [_] [] _)]) ->
-          S ts      (Op [x]:s:ss)         oss          StackOp
       ([o1@(Prefix l1 r1 _)], [o2@(Prefix l2 (r2:r2s) _)])
         | l2++[r2] == l1 ->
-          S ts      (Op l1:ss)            oss          StackOp
+          S ts      (Op l1:ss)            oss          ContinueOp
       ([o1@(Prefix [_] _ _)], [o2@(Prefix _ [] _)]) ->
           S ts      (Op [x]:s:ss)         oss          StackOp
       ([o1@(Postfix [_] [] p1)], [o2@(Prefix [_] [] p2)])
+        -- TODO use flushLower ?
         | p1 > p2 ->
           S ts      (Op [x]:s:ss)         oss          StackOp
         | p1 < p2 ->
           S ts      (Op [x]:ss)           (apply table s oss) StackOp
         | otherwise -> error $ "precedence cannot be mixed: " ++ show t ++ ", " ++ show s
       ([o1@(Closed [_] _ SExpression)], _) ->
-        S ts                (Op [x]:s:ss)              ([]:os:oss')            StackApp
+        S ts        (Op [x]:s:ss)         ([]:os:oss')        StackOp
         where (os:oss') = oss
 
       ([o1@(Closed l1 [] Discard)], [o2@(Closed l2 [r2] Discard)])
@@ -155,7 +161,7 @@ step' table sh = case sh of
           where ((o:os):oss') = apply table (Op l1) oss
       ([o1@(Closed l1 r1 _)], [o2@(Closed l2 (r2:r2s) _)])
         | l2++[r2] == l1 ->
-          S ts      (Op l1:ss)            oss          StackOp
+          S ts      (Op l1:ss)            oss          ContinueOp
       (_,[o2@(Closed [_] _ SExpression)]) ->
         S ts                (s:ss)              ((t:os):oss')           SExpr
         where (os:oss') = oss
@@ -164,7 +170,7 @@ step' table sh = case sh of
       ([o1@(Closed _ [] _)], [_]) ->
           S (t:ts)            ss                  (apply table s oss) FlushOp
       ([o1@(Closed _ _ _)], [_]) ->
-          S ts      (Op [x]:s:ss)           oss FlushOp
+          S ts      (Op [x]:s:ss)           oss StackOp
       _ -> error $ "TODO: " ++ show t ++ ", " ++ show s
 
   S   (t@(Sym x):ts) (s@(Node _):ss)   (os:oss)              _ ->
@@ -218,9 +224,9 @@ flushLower table o1 x ts (s@(Op y):ss) oss = case findOps y table of
     | o1 `lower` o2 ->
       flushLower table o1 x ts ss (apply table s oss)
     | otherwise ->
-      S ts      (Op [x]:s:ss)         oss          StackOp
+      S ts (Op [x]:s:ss) oss FlushOp
 flushLower table o1 x ts ss oss =
-   S ts      (Op [x]:ss)         oss          StackOp
+      S ts (Op [x]:ss)   oss StackOp
 
 apply table s@(Op y) (os:oss) = (Node (s:reverse l) : r) : oss
   where nargs = case findOps y table of
