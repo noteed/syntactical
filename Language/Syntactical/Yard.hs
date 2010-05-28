@@ -16,6 +16,8 @@
 
 module Language.Syntactical.Yard where
 
+import Data.List (intersperse)
+
 import Language.Syntactical.Data
 
 -- An applicator is a non-operator symbol that is applied
@@ -45,6 +47,7 @@ data Done =
   | UnmatchedR -- TODO have some error states
   | NotFirst String -- error case: the operator part appears on
                     -- the input but its prefix hasn't been seen
+  | Missing [String] String -- error case: missing parts before part
   | CantMix Op Op -- error case: can't mix two operators
   | Unexpected -- unexpected state (can't happen, this is a bug)
   deriving (Eq, Show)
@@ -60,6 +63,8 @@ showDone d = case d of
   UnmatchedL -> "Parse error: missing operator suffix"
   UnmatchedR -> "Parse error: missing operator prefix"
   NotFirst _ -> "Parse error: missing operator prefix"
+  Missing ps p -> "Parse error: missing operator parts " ++
+    concat (intersperse " " ps) ++ " before " ++ p
   CantMix _ _ -> "Parse error: cannot mix operators"
   Unexpected -> "Parsing raised a bug"
 
@@ -154,6 +159,8 @@ step' table sh = case sh of
       ([Prefix l1 _ _], [Prefix l2 (r2:_) _])
         | l2++[r2] == l1 ->
           S ts      (Op l1:ss)            oss          ContinueOp
+        | otherwise ->
+          S   (t:ts) (s:ss) oss (Done $ missingPrefix l1 l2)
       ([Prefix [_] _ _], [Prefix _ [] _]) ->
           S ts      (Op [x]:s:ss)         oss          StackOp
       ([o1@(Postfix [_] [] p1)], [o2@(Prefix [_] [] p2)])
@@ -267,4 +274,7 @@ apply _ s@(Sym _) (os:h:oss) =  (ap:h):oss
 apply _ s@(Node _) (os:h:oss) =  (ap:h):oss
   where ap = if null os then s else Node (s:reverse os)
 apply _ s oss = error $ "can't apply " ++ show s ++ " to " ++ show oss
+
+missingPrefix l1 l2 = Missing (init l1') (last l1')
+  where l1' = drop (length l2) l1
 
