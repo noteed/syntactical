@@ -1,6 +1,7 @@
 module Language.Syntactical.Tests.Examples where
 
 import Language.Syntactical
+import Language.Syntactical.Yard (Done(..))
 
 table0 :: Table
 table0 = Table
@@ -147,6 +148,12 @@ testsTable0 = [
 
   , ("f a b = let { c } in case d of { e }",
      "⟨= ⟨f a b⟩ ⟨letin ⟨{} c⟩ ⟨caseof d ⟨{} e⟩⟩⟩⟩")
+  ]
+
+testsTable0' :: [(String, Done)]
+testsTable0' =
+  [ ("true then 1 else 0", NotFirst "then")
+  , ("if true 1 else 0", NotFirst "then")
   ]
 
 checkTable0 = checkTests table0 testsTable0

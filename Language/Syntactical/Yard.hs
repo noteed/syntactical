@@ -107,6 +107,10 @@ step table sh = case sh of
 
   S   ts                (s@(Op y):ss)      ([a]:oss) _ ->
     case findOps y table of
+  -- TODO this should not happen: a MatchedR should occur before:
+  -- this state should be produced directly instead of first pushing
+  -- the Postfix or the Closed onto the stack then push it back to
+  -- the input in this step.
       [Postfix _ [] _] -> S (Node [s,a]:ts) ss ([]:oss) MakeInert
       [Closed _ [] _] ->  S (Node [s,a]:ts) ss ([]:oss) MakeInert
       _ -> step' table sh
@@ -138,8 +142,6 @@ step' table sh = case sh of
       ([Closed [_] _ Distfix],[Closed [_] _ SExpression]) ->
         S ts            (Op [x]:s:ss)       (os:oss')            StackOp
         where (os:oss') = oss
-      ([o1@(Infix [_] [] _ _)], [Infix [_] [] _ _]) ->
-        flushLower table o1 x ts (s:ss) oss
       ([Infix l1 _ _ _], [Infix l2 (r2:_) _ _])
         | l2++[r2] == l1 ->
           S ts      (Op l1:ss)            oss          ContinueOp

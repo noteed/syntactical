@@ -76,6 +76,11 @@ isInfix' :: Op -> [String] -> Bool
 isInfix' (Infix xs _ _ _) ys = xs == ys
 isInfix' _ _ = False
 
+infixSym s (Op ps) = concat $ intersperse s $ "" : ps ++ [""]
+prefixSym s (Op ps) = concat $ intersperse s $ ps ++ [""]
+postfixSym s (Op ps) = concat $ intersperse s $ "" : ps
+closedSym s (Op ps) = concat $ intersperse s ps
+
 lower :: Op -> Op -> Bool
 lower o1@(Infix [_] _ _ _) o2@(Infix _ [] _ _)
     | nonAssoc o1 && nonAssoc o2 = error "cannot mix"
