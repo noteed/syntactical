@@ -23,10 +23,10 @@ testYard = testGroup "Language.Syntactical.Yard"
 -- Apply the parser p to i and check if it returns
 -- the expected value o.
 helper p (i,o) = testCase i $ case p i of
-  Right o' -> o @?= show o'
+  Right o' -> o @=? show o'
   Left err -> assertFailure $ "cannot parse: " ++ show err
 
 helper' p (i,o) = testCase i $ case p i of
   Right o' -> assertFailure $ "unexpected successful parse: " ++ show o'
-  Left (S _ _ _ (Done o')) -> o @?= o'
+  Left (S _ _ _ (Done o')) -> o @=? o'
 

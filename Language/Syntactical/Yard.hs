@@ -47,7 +47,8 @@ data Done =
   | UnmatchedR -- TODO have some error states
   | NotFirst String -- error case: the operator part appears on
                     -- the input but its prefix hasn't been seen
-  | Missing [String] String -- error case: missing parts before part
+  | MissingBefore [String] String -- error case: missing parts before part
+  | MissingAfter String [String]  -- error case: missing part before parts
   | CantMix Op Op -- error case: can't mix two operators
   | Unexpected -- unexpected state (can't happen, this is a bug)
   deriving (Eq, Show)
@@ -63,7 +64,7 @@ showDone d = case d of
   UnmatchedL -> "Parse error: missing operator suffix"
   UnmatchedR -> "Parse error: missing operator prefix"
   NotFirst _ -> "Parse error: missing operator prefix"
-  Missing ps p -> "Parse error: missing operator parts " ++
+  MissingBefore ps p -> "Parse error: missing operator parts " ++
     concat (intersperse " " ps) ++ " before " ++ p
   CantMix _ _ -> "Parse error: cannot mix operators"
   Unexpected -> "Parsing raised a bug"
@@ -237,8 +238,24 @@ step' table sh = case sh of
   S   (t@(Node _):ts)   ss                  (os:oss)                _ ->
     S ts                (t:ss)              ([]:os:oss)             StackApp
 
-  S   []                (s@(Op _):ss)       oss              _ ->
-    S []                ss                  (apply table s oss)            FlushOp
+  S   []                (s@(Op y):ss)       oss              _ ->
+    case findOps y table of
+      [Infix _ [] _ _] ->
+        S []            ss                  (apply table s oss)            FlushOp
+      [Infix l r _ _] ->
+        S [] (s:ss) oss (Done $ head r `MissingAfter` l)
+      [Prefix _ [] _] ->
+        S []            ss                  (apply table s oss)            FlushOp
+      [Prefix l r _] ->
+        S [] (s:ss) oss (Done $ head r `MissingAfter` l)
+      [Postfix _ [] _] ->
+        S []            ss                  (apply table s oss)            FlushOp
+      [Postfix l r _] ->
+        S [] (s:ss) oss (Done $ head r `MissingAfter` l)
+      [Closed _ [] _] ->
+        S []            ss                  (apply table s oss)            FlushOp
+      [Closed l r _] ->
+        S [] (s:ss) oss (Done $ head r `MissingAfter` l)
 
   S   []                (s@(Sym _):ss)      oss              _ ->
     S []                ss                  (apply table s oss)            FlushApp
@@ -275,6 +292,6 @@ apply _ s@(Node _) (os:h:oss) =  (ap:h):oss
   where ap = if null os then s else Node (s:reverse os)
 apply _ s oss = error $ "can't apply " ++ show s ++ " to " ++ show oss
 
-missingPrefix l1 l2 = Missing (init l1') (last l1')
+missingPrefix l1 l2 = init l1' `MissingBefore` last l1'
   where l1' = drop (length l2) l1
 
