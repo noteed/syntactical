@@ -152,8 +152,9 @@ testsTable0 = [
 
 testsTable0' :: [(String, Done)]
 testsTable0' =
-  [ ("true then 1 else 0", NotFirst "then")
+  [ ("true then 1 else 0", MissingBefore ["if"] "then")
   , ("if true 1 else 0", MissingBefore ["then"] "else")
+  , ("true 1 else 0", MissingBefore ["if","then"] "else")
   , ("if true then 1 0", MissingAfter "else" ["if","then"])
   ]
 

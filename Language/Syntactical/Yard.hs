@@ -43,10 +43,6 @@ data Rule = Initial
 
 data Done =
     Success    -- everything is successfuly parsed
-  | UnmatchedL -- TODO have some error states
-  | UnmatchedR -- TODO have some error states
-  | NotFirst String -- error case: the operator part appears on
-                    -- the input but its prefix hasn't been seen
   | MissingBefore [String] String -- error case: missing parts before part
   | MissingAfter String [String]  -- error case: missing part before parts
   | CantMix Op Op -- error case: can't mix two operators
@@ -61,9 +57,6 @@ isDone sh = case rule sh of
 showDone :: Done -> [Char]
 showDone d = case d of
   Success -> "Parsing successful"
-  UnmatchedL -> "Parse error: missing operator suffix"
-  UnmatchedR -> "Parse error: missing operator prefix"
-  NotFirst _ -> "Parse error: missing operator prefix"
   MissingBefore ps p -> "Parse error: missing operator parts " ++
     concat (intersperse " " ps) ++ " before " ++ p
   CantMix _ _ -> "Parse error: cannot mix operators"
@@ -217,9 +210,16 @@ step' table sh = case sh of
     case findOp x table of
       [] -> S ts       (t:ss)              ([]:os:oss)             StackApp
       -- x is the first sub-op, and the stack is empty or has a left bracket at its top.
-      _ -> case findOps [x] table of
-        [] -> S (t:ts) ss                  (os:oss)                (Done $ NotFirst x)
-        [Closed [_] _ SExpression] -> S ts   (Op [x]:ss) ([]:os:oss)           StackOp
+      _ -> case findOp x table of
+        [Infix [_] _ _ _] -> S ts (Op [x]:ss) (os:oss) StackOp
+        [Infix l _ _ _] -> S (t:ts) ss (os:oss) (Done $ init l `MissingBefore` last l)
+        [Prefix [_] _ _] -> S ts (Op [x]:ss) (os:oss) StackOp
+        [Prefix l _ _] -> S (t:ts) ss (os:oss) (Done $ init l `MissingBefore` last l)
+        [Postfix [_] _ _] -> S ts (Op [x]:ss) (os:oss) StackOp
+        [Postfix l _ _] -> S (t:ts) ss (os:oss) (Done $ init l `MissingBefore` last l)
+        [Closed [_] _ SExpression] -> S ts (Op [x]:ss) ([]:os:oss) StackOp
+        [Closed [_] _ _] -> S ts (Op [x]:ss) (os:oss) StackOp
+        [Closed l _ _] -> S (t:ts) ss (os:oss) (Done $ init l `MissingBefore` last l)
         _ -> S ts      (Op [x]:ss)  (os:oss)  StackOp
 
   S   (t@(Node _):ts) (s@(Op y):ss)       (os:oss)               _ ->
