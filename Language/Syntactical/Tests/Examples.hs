@@ -148,6 +148,8 @@ testsTable0 = [
 
   , ("f a b = let { c } in case d of { e }",
      "⟨= ⟨f a b⟩ ⟨letin ⟨{} c⟩ ⟨caseof d ⟨{} e⟩⟩⟩⟩")
+
+  -- TODO , ("⟨⟩", "⟨⟩")
   ]
 
 testsTable0' :: [(String, Done)]
@@ -156,6 +158,24 @@ testsTable0' =
   , ("if true 1 else 0", MissingBefore ["then"] "else")
   , ("true 1 else 0", MissingBefore ["if","then"] "else")
   , ("if true then 1 0", MissingAfter "else" ["if","then"])
+  , ("[ a | b", MissingAfter "]" ["[","|"])
+  , ("a | b ]", MissingBefore ["["] "|")
+-- TODO cases above with parenthesis or in bigger expression.
+-- TODO obviously those are not success, but I have to
+-- create and recognize the error cases.
+{-
+  , ("()", Success)
+  , ("1 2", Success)
+  , ("f (1 2)", Success)
+  , ("[ a b ]", Success)
+  , ("[ | b ]", Success)
+  , ("[ a | ]", Success)
+  , ("</ 1 2 />", Success)
+  , ("1 2 +", Success)
+  , ("+ 1 2", Success)
+  , ("+ 2", Success)
+  , ("+", Success)
+-}
   ]
 
 checkTable0 = checkTests table0 testsTable0

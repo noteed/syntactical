@@ -51,6 +51,12 @@ display = tail . display'
   display' (Op l) = ' ' : concat l
   display' (Node es) = ' ' : '⟨' : tail (concatMap display' es) ++ "⟩"
 
+isSym (Sym _) = True
+isSym _ = False
+
+isOp (Op _) = True
+isOp _ = False
+
 associativity :: Op -> Associativity
 associativity (Infix _ _ a _) = a
 

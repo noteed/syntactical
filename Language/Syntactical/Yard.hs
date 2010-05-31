@@ -13,6 +13,10 @@
 -- TODO is ! a + b allowed if ! and + have the same precedence?
 -- TODO allow specific operator table for internal operator holes
 -- (e.g. to reuse a same symbol with different fixity/precedecence).
+-- TODO after some MatchedR, the first element on the output stack
+-- is pushed back on the input (to be applied later). Maybe instead
+-- it could be directly move to its correct location (on the stack or
+-- on the output) so the type of the input stack can be on tokens.
 
 module Language.Syntactical.Yard where
 
@@ -99,7 +103,26 @@ shunt table ts = case fix $ initial ts of
   S [] [] [[o']] (Done Success) -> Right o'
   s -> Left s
   where fix s = let s' = step table s in
-                if isDone s' then s' else fix s'
+                if sat table s' then if isDone s' then s' else fix s'
+                                else error "invariants not satified"
+
+sat table s = all (\i -> i table s) invariants
+
+invariants =
+  [ -- inv1
+  ]
+
+inv1 table (S ts (Op x:ss) oss Inert) =
+  case findOps x table of
+    [Infix _ _ _ _] -> countInfix table 0 (Op x:ss) + 1 == length (head oss)
+    _ -> True
+inv1 _ _ = True
+
+countInfix _ acc [] = acc
+countInfix table acc (Op x:ss) = case findOps x table of
+  [Infix _ _ _ _] -> countInfix table (acc + 1) ss
+  _ -> countInfix table acc ss
+countInfix table acc (Sym _:ss) = countInfix table acc ss
 
 step :: Table -> Shunt -> Shunt
 step table sh = case sh of
@@ -279,13 +302,18 @@ flushLower _ _ x ts ss oss =
       S ts (Op [x]:ss)   oss StackOp
 
 apply :: Table -> Tree -> [[Tree]] -> [[Tree]]
-apply table s@(Op y) (os:oss) = (Node (s:reverse l) : r) : oss
+apply table s@(Op y) (os:oss) =
+  if length l < nargs
+  -- TODO this error case should probably be discovered earlier,
+  -- so hitting this point should be a bug.
+  then error $ "not enough arguments supplied to " ++ show y
+  else (Node (s:reverse l) : r) : oss
   where nargs = case findOps y table of
           [Infix _ _ _ _] -> length y + 1
           [Closed _ _ _] -> length y - 1
           [_] -> length y
           [] -> error $ "bug: wrong use of apply: " ++ show y
-        (l,r) = splitAt nargs os -- TODO test correct lenght of os
+        (l,r) = splitAt nargs os
 apply _ s@(Sym _) (os:h:oss) =  (ap:h):oss
   where ap = if null os then s else Node (s:reverse os)
 apply _ s@(Node _) (os:h:oss) =  (ap:h):oss
