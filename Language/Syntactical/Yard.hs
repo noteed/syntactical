@@ -50,6 +50,7 @@ data Done =
   | MissingBefore [String] String -- error case: missing parts before part
   | MissingAfter String [String]  -- error case: missing part before parts
   | CantMix Op Op -- error case: can't mix two operators
+  | CantApply Int Int -- error case: can't apply number to number
   | Unexpected -- unexpected state (can't happen, this is a bug)
   deriving (Eq, Show)
 
@@ -64,6 +65,7 @@ showDone d = case d of
   MissingBefore ps p -> "Parse error: missing operator parts " ++
     concat (intersperse " " ps) ++ " before " ++ p
   CantMix _ _ -> "Parse error: cannot mix operators"
+  CantApply a b -> "Parse error: cannot apply " ++ show a ++ " to " ++ show b
   Unexpected -> "Parsing raised a bug"
 
 data Shunt = S {
@@ -141,6 +143,17 @@ step table sh = case sh of
 step' :: Table -> Shunt -> Shunt
 step' table sh = case sh of
 
+  S   (t@(Num _):ts)    ss@(Sym _:_)        (os@(Num _:_):oss)      _ ->
+    S ts                ss                  ((t:os):oss)            Inert
+  S   (t@(Num _):ts)    ss@(Node _:_)       (os@(Num _:_):oss)      _ ->
+    S ts                ss                  ((t:os):oss)            Inert
+  S   (t@(Num b):ts)    ss@(Op x:_)         (os@(Num a:_):oss)      Inert ->
+    case findOps x table of
+      [Closed [_] _ SExpression] ->
+        S ts                ss                  ((t:os):oss)            Inert
+      _ -> S (t:ts) ss (os:oss) (Done $ CantApply a b)
+  S   (t@(Num b):ts)    ss                  (os@(Num a:_):oss)      Inert ->
+    S (t:ts) ss (os:oss) (Done $ CantApply a b)
   S   (t@(Num _):ts)    ss                  (os:oss)                _ ->
     S ts                ss                  ((t:os):oss)            Inert
 

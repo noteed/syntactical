@@ -66,6 +66,8 @@ testsTable0 = [
   ("f a b","⟨f a b⟩"),
   ("f 1 b","⟨f 1 b⟩"),
   ("f a 1","⟨f a 1⟩"),
+  ("f 1 2","⟨f 1 2⟩"),
+  ("f 1 2 3","⟨f 1 2 3⟩"),
 
   ("f a + 1","⟨+ ⟨f a⟩ 1⟩"),
   ("1 + f a","⟨+ 1 ⟨f a⟩⟩"),
@@ -157,21 +159,23 @@ testsTable0' =
   [ ("true then 1 else 0", MissingBefore ["if"] "then")
   , ("if true 1 else 0", MissingBefore ["then"] "else")
   , ("true 1 else 0", MissingBefore ["if","then"] "else")
-  , ("if true then 1 0", MissingAfter "else" ["if","then"])
+  , ("if true then 1", MissingAfter "else" ["if","then"])
   , ("[ a | b", MissingAfter "]" ["[","|"])
   , ("a | b ]", MissingBefore ["["] "|")
+  , ("1 2", CantApply 1 2)
+  , ("(1 2)", CantApply 1 2)
+  , ("f (1 2)", CantApply 1 2)
+  , ("</ 1 2 />", CantApply 1 2)
+  , ("1 2 + 3", CantApply 1 2)
 -- TODO cases above with parenthesis or in bigger expression.
 -- TODO obviously those are not success, but I have to
 -- create and recognize the error cases.
 {-
   , ("()", Success)
-  , ("1 2", Success)
-  , ("f (1 2)", Success)
   , ("[ a b ]", Success)
   , ("[ | b ]", Success)
   , ("[ a | ]", Success)
-  , ("</ 1 2 />", Success)
-  , ("1 2 +", Success)
+  , ("1 +", Success)
   , ("+ 1 2", Success)
   , ("+ 2", Success)
   , ("+", Success)
