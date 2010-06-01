@@ -51,6 +51,7 @@ data Done =
   | MissingAfter String [String]  -- error case: missing part before parts
   | CantMix Op Op -- error case: can't mix two operators
   | CantApply Int Int -- error case: can't apply number to number
+  | EmptyHole String String -- error case: no sub-expression between ops/parts.
   | Unexpected -- unexpected state (can't happen, this is a bug)
   deriving (Eq, Show)
 
@@ -66,7 +67,12 @@ showDone d = case d of
     concat (intersperse " " ps) ++ " before " ++ p
   CantMix _ _ -> "Parse error: cannot mix operators"
   CantApply a b -> "Parse error: cannot apply " ++ show a ++ " to " ++ show b
+  EmptyHole a b -> "Parse error: no sub-expression between " ++ a ++ " and " ++ b
   Unexpected -> "Parsing raised a bug"
+
+stackedOp StackOp = True
+stackedOp ContinueOp = True
+stackedOp _ = False
 
 data Shunt = S {
     input :: [Tree]    -- list of token (Nodes can be pushed back.)
@@ -165,74 +171,91 @@ step' table sh = case sh of
       [Closed [_] _ _] ->           S ts (Op [x]:s:ss) (os:oss)    StackOp
       _ -> S (t:ts) ss (apply table s $ os:oss) FlushApp
 
-  S   (t@(Sym x):ts) (s@(Op y):ss) oss      _ ->
-    case (findOp x table, findOps y table) of
-      ([],[Closed [_] _ SExpression]) ->
+  S   (t@(Sym x):ts) (s@(Op y):ss) oss r ->
+    case (findOp x table, findOps y table, r) of
+      ([], [Closed [_] _ SExpression], _) ->
         S ts            (s:ss)              ((t:os):oss')        SExpr
         where (os:oss') = oss
-      ([], _) -> S ts   (t:s:ss)            ([]:oss)             StackApp
-      ([Closed [_] _ DistfixAndDiscard],[Closed [_] _ SExpression]) ->
+      ([], _, _) -> S ts   (t:s:ss)            ([]:oss)             StackApp
+      ([Closed [_] _ DistfixAndDiscard], [Closed [_] _ SExpression], _) ->
         S ts            (Op [x]:s:ss)       (os:oss')            StackOp
         where (os:oss') = oss
-      ([Closed [_] _ Distfix],[Closed [_] _ SExpression]) ->
+      ([Closed [_] _ Distfix], [Closed [_] _ SExpression], _) ->
         S ts            (Op [x]:s:ss)       (os:oss')            StackOp
         where (os:oss') = oss
-      ([Infix l1 _ _ _], [Infix l2 (r2:_) _ _])
+      ([Infix l1 _ _ _], [Infix l2 (r2:_) _ _], _)
+        | l2++[r2] == l1 && stackedOp r ->
+          S (t:ts) (s:ss) oss (Done $ EmptyHole (last y) x)
         | l2++[r2] == l1 ->
           S ts      (Op l1:ss)            oss          ContinueOp
-      ([o1@(Infix [_] _ _ _)], [Infix _ [] _ _]) ->
+      ([o1@(Infix [_] _ _ _)], [Infix _ [] _ _], _)
+        | stackedOp r -> S (t:ts) (s:ss) oss (Done $ EmptyHole (last y) x)
+        | otherwise -> flushLower table o1 x ts (s:ss) oss
+      ([o1@(Infix _ _ _ _)], [Prefix _ _ _], _) ->
         flushLower table o1 x ts (s:ss) oss
-      ([o1@(Infix _ _ _ _)], [Prefix _ _ _]) ->
-        flushLower table o1 x ts (s:ss) oss
-      ([Prefix [_] _ _], [Infix [_] _ _ _]) ->
+      ([Prefix [_] _ _], [Infix [_] _ _ _], _) ->
           S ts      (Op [x]:s:ss)         oss          StackOp
-      ([Prefix l1 _ _], [Prefix l2 (r2:_) _])
+      ([Prefix l1 _ _], [Prefix l2 (r2:_) _], _)
+        | l2++[r2] == l1 && stackedOp r ->
+          S (t:ts) (s:ss) oss (Done $ EmptyHole (last y) x)
         | l2++[r2] == l1 ->
           S ts      (Op l1:ss)            oss          ContinueOp
         | otherwise ->
           S   (t:ts) (s:ss) oss (Done $ missingPrefix l1 l2)
-      ([Prefix [_] _ _], [Prefix _ [] _]) ->
+      ([Prefix [_] _ _], [Prefix _ [] _], _) ->
           S ts      (Op [x]:s:ss)         oss          StackOp
-      ([o1@(Postfix [_] [] p1)], [o2@(Prefix [_] [] p2)])
+      ([o1@(Postfix [_] [] p1)], [o2@(Prefix [_] [] p2)], _)
         -- TODO use flushLower ?
         | p1 > p2 ->
           S ts      (Op [x]:s:ss)         oss          StackOp
         | p1 < p2 ->
           S ts      (Op [x]:ss)           (apply table s oss) StackOp
         | otherwise ->  S (t:ts) (s:ss) oss (Done $ CantMix o1 o2)
-      ([Closed [_] _ SExpression], _) ->
+      ([Closed [_] _ SExpression], _, _) ->
         S ts        (Op [x]:s:ss)         ([]:os:oss')        StackOp
         where (os:oss') = oss
 
-      ([Closed l1 [] Discard], [Closed l2 [r2] Discard])
+      ([Closed l1 [] Discard], [Closed l2 [r2] Discard], _)
+        | l2++[r2] == l1 && stackedOp r ->
+          S (t:ts) (s:ss) oss (Done $ EmptyHole (last y) x)
         | l2++[r2] == l1 ->
          S (o:ts)           ss             (os:oss')             MatchedR
          where ((o:os):oss') = oss
-      ([Closed l1 [] DistfixAndDiscard], [Closed l2 [r2] DistfixAndDiscard])
+      ([Closed l1 [] DistfixAndDiscard], [Closed l2 [r2] DistfixAndDiscard], _)
+        | l2++[r2] == l1 && stackedOp r ->
+          S (t:ts) (s:ss) oss (Done $ EmptyHole (last y) x)
         | l2++[r2] == l1 ->
          S (o:ts)           ss             (os:oss')             MatchedR
          where ((o:os):oss') = oss
-      ([Closed l1 [] SExpression], [Closed l2 [r2] SExpression])
+      ([Closed l1 [] SExpression], [Closed l2 [r2] SExpression], _)
+        | l2++[r2] == l1 && stackedOp r ->
+          S (t:ts) (s:ss) oss (Done $ EmptyHole (last y) x)
         | l2++[r2] == l1 ->
           S ts                ss                  ((ap:h):oss')           MatchedR
           where (os:h:oss') = oss
                 ap = Node (reverse os)
 
-      ([Closed l1 [] _], [Closed l2 [r2] _])
+      ([Closed l1 [] _], [Closed l2 (r2:_) _], _)
+        | l2++[r2] == l1 && stackedOp r ->
+          S (t:ts) (s:ss) oss (Done $ EmptyHole (last y) x)
         | l2++[r2] == l1 ->
           S (o:ts)           ss       (os:oss')      MatchedR
+        | otherwise ->
+          S (t:ts) (s:ss) oss (Done $ missingPrefix l1 l2)
           where ((o:os):oss') = apply table (Op l1) oss
-      ([Closed l1 _ _], [Closed l2 (r2:_) _])
+      ([Closed l1 _ _], [Closed l2 (r2:_) _], _)
+        | l2++[r2] == l1 && stackedOp r ->
+          S (t:ts) (s:ss) oss (Done $ EmptyHole (last y) x)
         | l2++[r2] == l1 ->
           S ts      (Op l1:ss)            oss          ContinueOp
-      (_,[Closed [_] _ SExpression]) ->
+      (_, [Closed [_] _ SExpression], _) ->
         S ts                (s:ss)              ((t:os):oss')           SExpr
         where (os:oss') = oss
-      ([_], [Closed _ _ _]) ->
+      ([_], [Closed _ _ _], _) ->
           S ts      (Op [x]:s:ss)         oss          StackOp
-      ([Closed _ [] _], [_]) ->
+      ([Closed _ [] _], [_], _) ->
           S (t:ts)            ss                  (apply table s oss) FlushOp
-      ([Closed _ _ _], [_]) ->
+      ([Closed _ _ _], [_], _) ->
           S ts      (Op [x]:s:ss)           oss StackOp
       _ -> error $ "TODO: This is a bug: the patterns should be exhaustive but" ++
              "(" ++ show t ++ ", " ++ show s ++ ") is not matched."

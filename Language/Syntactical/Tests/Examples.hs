@@ -162,23 +162,29 @@ testsTable0' =
   , ("if true then 1", MissingAfter "else" ["if","then"])
   , ("[ a | b", MissingAfter "]" ["[","|"])
   , ("a | b ]", MissingBefore ["["] "|")
+  , ("[ a b ]", MissingBefore ["|"] "]")
+  , ("[ a b ]", MissingBefore ["|"] "]")
   , ("1 2", CantApply 1 2)
   , ("(1 2)", CantApply 1 2)
   , ("f (1 2)", CantApply 1 2)
   , ("</ 1 2 />", CantApply 1 2)
   , ("1 2 + 3", CantApply 1 2)
+  , ("1 + * 3", EmptyHole "+" "*")
+  , ("1 * + 3", EmptyHole "*" "+")
+  , ("()", EmptyHole "(" ")")
+  , ("[ | b ]", EmptyHole "[" "|")
+  , ("[ a | ]", EmptyHole "|" "]")
 -- TODO cases above with parenthesis or in bigger expression.
 -- TODO obviously those are not success, but I have to
 -- create and recognize the error cases.
 {-
-  , ("()", Success)
-  , ("[ a b ]", Success)
-  , ("[ | b ]", Success)
-  , ("[ a | ]", Success)
   , ("1 +", Success)
   , ("+ 1 2", Success)
   , ("+ 2", Success)
   , ("+", Success)
+  , ("|", Success)
+  , ("[", Success)
+  , ("]", Success)
 -}
   ]
 
