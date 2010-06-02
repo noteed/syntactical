@@ -37,6 +37,7 @@ data Rule = Initial
           | FlushApp   -- apply an applicator
           | StackApp   -- push an applicator to the stack
           | FlushOp    -- apply an operator
+          | StackL     -- push the first part of a closed or prefix operator
           | StackOp    -- push a new operator part to the stack
           | ContinueOp -- append an operator part to the operator
                        -- at the top of the stack
@@ -70,6 +71,7 @@ showDone d = case d of
   EmptyHole a b -> "Parse error: no sub-expression between " ++ a ++ " and " ++ b
   Unexpected -> "Parsing raised a bug"
 
+stackedOp StackL = True
 stackedOp StackOp = True
 stackedOp ContinueOp = True
 stackedOp _ = False
@@ -166,9 +168,9 @@ step' table sh = case sh of
   S   (t@(Sym x):ts)    (s@(Sym _):ss)      (os:oss) _ ->
     case findOp x table of
       [] -> S ts (s:ss) ((t:os):oss) Inert
-      [Prefix [_] _ _] ->           S ts (Op [x]:s:ss) (os:oss)    StackOp
-      [Closed [_] _ SExpression] -> S ts (Op [x]:s:ss) ([]:os:oss) StackOp
-      [Closed [_] _ _] ->           S ts (Op [x]:s:ss) (os:oss)    StackOp
+      [Prefix [_] _ _] ->           S ts (Op [x]:s:ss) (os:oss)    StackL
+      [Closed [_] _ SExpression] -> S ts (Op [x]:s:ss) ([]:os:oss) StackL
+      [Closed [_] _ _] ->           S ts (Op [x]:s:ss) (os:oss)    StackL
       _ -> S (t:ts) ss (apply table s $ os:oss) FlushApp
 
   S   (t@(Sym x):ts) (s@(Op y):ss) oss r ->
@@ -178,10 +180,10 @@ step' table sh = case sh of
         where (os:oss') = oss
       ([], _, _) -> S ts   (t:s:ss)            ([]:oss)             StackApp
       ([Closed [_] _ DistfixAndDiscard], [Closed [_] _ SExpression], _) ->
-        S ts            (Op [x]:s:ss)       (os:oss')            StackOp
+        S ts            (Op [x]:s:ss)       (os:oss')            StackL
         where (os:oss') = oss
       ([Closed [_] _ Distfix], [Closed [_] _ SExpression], _) ->
-        S ts            (Op [x]:s:ss)       (os:oss')            StackOp
+        S ts            (Op [x]:s:ss)       (os:oss')            StackL
         where (os:oss') = oss
       ([Infix l1 _ _ _], [Infix l2 (r2:_) _ _], _)
         | l2++[r2] == l1 && stackedOp r ->
@@ -194,7 +196,7 @@ step' table sh = case sh of
       ([o1@(Infix _ _ _ _)], [Prefix _ _ _], _) ->
         flushLower table o1 x ts (s:ss) oss
       ([Prefix [_] _ _], [Infix [_] _ _ _], _) ->
-          S ts      (Op [x]:s:ss)         oss          StackOp
+          S ts      (Op [x]:s:ss)         oss          StackL
       ([Prefix l1 _ _], [Prefix l2 (r2:_) _], _)
         | l2++[r2] == l1 && stackedOp r ->
           S (t:ts) (s:ss) oss (Done $ EmptyHole (last y) x)
@@ -203,7 +205,7 @@ step' table sh = case sh of
         | otherwise ->
           S   (t:ts) (s:ss) oss (Done $ missingPrefix l1 l2)
       ([Prefix [_] _ _], [Prefix _ [] _], _) ->
-          S ts      (Op [x]:s:ss)         oss          StackOp
+          S ts      (Op [x]:s:ss)         oss          StackL
       ([o1@(Postfix [_] [] p1)], [o2@(Prefix [_] [] p2)], _)
         -- TODO use flushLower ?
         | p1 > p2 ->
@@ -212,7 +214,7 @@ step' table sh = case sh of
           S ts      (Op [x]:ss)           (apply table s oss) StackOp
         | otherwise ->  S (t:ts) (s:ss) oss (Done $ CantMix o1 o2)
       ([Closed [_] _ SExpression], _, _) ->
-        S ts        (Op [x]:s:ss)         ([]:os:oss')        StackOp
+        S ts        (Op [x]:s:ss)         ([]:os:oss')        StackL
         where (os:oss') = oss
 
       ([Closed l1 [] Discard], [Closed l2 [r2] Discard], _)
@@ -251,6 +253,8 @@ step' table sh = case sh of
       (_, [Closed [_] _ SExpression], _) ->
         S ts                (s:ss)              ((t:os):oss')           SExpr
         where (os:oss') = oss
+      ([Infix [_] _ _ _], [Closed _ _ _], _)
+        | r == StackL -> error $ "missing sub-expression before " ++ x
       ([_], [Closed _ _ _], _) ->
           S ts      (Op [x]:s:ss)         oss          StackOp
       ([Closed _ [] _], [_], _) ->
@@ -265,19 +269,22 @@ step' table sh = case sh of
       [] -> S ts        (s:ss)              ((t:os):oss)          Application
       _ -> S (t:ts)     ss                  (apply table s $ os:oss)            FlushApp
 
-  S   (t@(Sym x):ts)    ss                  (os:oss)                _ ->
+  S   (t@(Sym x):ts)    ss                  (os:oss)                r ->
     case findOp x table of
       [] -> S ts       (t:ss)              ([]:os:oss)             StackApp
+      -- TODO this comment seems to be false...
       -- x is the first sub-op, and the stack is empty or has a left bracket at its top.
       _ -> case findOp x table of
-        [Infix [_] _ _ _] -> S ts (Op [x]:ss) (os:oss) StackOp
+        [Infix [_] _ _ _]
+          | r == Initial -> error $ "missing sub-expression before " ++ x
+          | otherwise -> S ts (Op [x]:ss) (os:oss) StackOp
         [Infix l _ _ _] -> S (t:ts) ss (os:oss) (Done $ init l `MissingBefore` last l)
-        [Prefix [_] _ _] -> S ts (Op [x]:ss) (os:oss) StackOp
+        [Prefix [_] _ _] -> S ts (Op [x]:ss) (os:oss) StackL
         [Prefix l _ _] -> S (t:ts) ss (os:oss) (Done $ init l `MissingBefore` last l)
         [Postfix [_] _ _] -> S ts (Op [x]:ss) (os:oss) StackOp
         [Postfix l _ _] -> S (t:ts) ss (os:oss) (Done $ init l `MissingBefore` last l)
-        [Closed [_] _ SExpression] -> S ts (Op [x]:ss) ([]:os:oss) StackOp
-        [Closed [_] _ _] -> S ts (Op [x]:ss) (os:oss) StackOp
+        [Closed [_] _ SExpression] -> S ts (Op [x]:ss) ([]:os:oss) StackL
+        [Closed [_] _ _] -> S ts (Op [x]:ss) (os:oss) StackL
         [Closed l _ _] -> S (t:ts) ss (os:oss) (Done $ init l `MissingBefore` last l)
         _ -> S ts      (Op [x]:ss)  (os:oss)  StackOp
 
