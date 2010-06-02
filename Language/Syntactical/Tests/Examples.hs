@@ -114,6 +114,7 @@ testsTable0 = [
   , ("# a °", "⟨° ⟨# a⟩⟩")
 --  , ("# a %", Error "precedence cannot be mixed")
   , ("# a !", "⟨# ⟨! a⟩⟩")
+  , ("a ! # b", "⟨⟨! a⟩ ⟨# b⟩⟩")
 
   , ("if true then 1 else 0", "⟨ifthenelse true 1 0⟩")
   , ("if 2 then 1 else 0", "⟨ifthenelse 2 1 0⟩")
@@ -123,6 +124,7 @@ testsTable0 = [
   , ("1 + if true then 1 else 0", "⟨+ 1 ⟨ifthenelse true 1 0⟩⟩")
   , ("1 + if true then 1 else a b + c", "⟨+ 1 ⟨ifthenelse true 1 ⟨+ ⟨a b⟩ c⟩⟩⟩")
   , ("f if true then 1 else 0", "⟨f ⟨ifthenelse true 1 0⟩⟩")
+  , ("true ? 1 : if true then 1 else 0", "⟨?: true 1 ⟨ifthenelse true 1 0⟩⟩")
 
   , ("</ a />","⟨<//> a⟩")
   , ("</ 0 />","⟨<//> 0⟩")
@@ -151,6 +153,8 @@ testsTable0 = [
   , ("f a b = let { c } in case d of { e }",
      "⟨= ⟨f a b⟩ ⟨letin ⟨{} c⟩ ⟨caseof d ⟨{} e⟩⟩⟩⟩")
 
+  , ("# true ? 1 : 0", "⟨?: ⟨# true⟩ 1 0⟩")
+
   -- TODO , ("⟨⟩", "⟨⟩")
   ]
 
@@ -174,6 +178,8 @@ testsTable0' =
   , ("()", EmptyHole "(" ")")
   , ("[ | b ]", EmptyHole "[" "|")
   , ("[ a | ]", EmptyHole "|" "]")
+  , ("true ? 1 : true then 1 else 0", MissingBefore ["if"] "then")
+  , ("true ? 1 : then 1 else 0", MissingBefore ["if"] "then")
 -- TODO cases above with parenthesis or in bigger expression.
 -- TODO obviously those are not success, but I have to
 -- create and recognize the error cases.

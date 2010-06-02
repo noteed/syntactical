@@ -236,6 +236,10 @@ step' table (S tt@((Sym x):ts) st@(s:ss) oo _)
 -- An operator part is on the input stack and on the stack.
 step' table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
   case (head $ findOp x table, head $ findOps y table) of
+    (Infix [] _ _ _, _) -> error "can't happen"
+    (Prefix [] _ _, _) -> error "can't happen"
+    (Postfix [] _ _, _) -> error "can't happen"
+    (Closed [] _ _, _) -> error "can't happen"
     (Closed [_] _ DistfixAndDiscard, Closed [_] _ SExpression) ->
       S ts            (Op [x]:st)       oo            StackL
     (Closed [_] _ Distfix, Closed [_] _ SExpression) ->
@@ -250,8 +254,10 @@ step' table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
       | otherwise -> flushLower table o1 x ts st oo
     (o1@(Infix _ _ _ _), Prefix _ _ _) ->
       flushLower table o1 x ts st oo
-    (Prefix [_] _ _, Infix [_] _ _ _) ->
+    (Prefix [_] _ _, Infix _ _ _ _) ->
         S ts      (Op [x]:st)         oo          StackL
+    (Prefix l1 _ _, Infix _ _ _ _) ->
+      S tt st oo (Done $ init l1 `MissingBefore` last l1)
     (Prefix l1 _ _, Prefix l2 (r2:_) _)
       | l2++[r2] == l1 && stackedOp ru ->
         S tt st oo (Done $ EmptyHole (last y) x)
