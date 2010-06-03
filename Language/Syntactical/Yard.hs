@@ -148,15 +148,13 @@ countInfix _ _ (Num _:_) =
 
 step :: Table -> Shunt -> Shunt
 step table sh = case sh of
-  S   ts                (s@(Op y):ss)      ([a]:oss) _ ->
-    case findOps y table of
+  S tt (s@(Op y):ss) ([a]:oss) _ -> case findOps y table of
   -- TODO this should not happen: a MatchedR should occur before:
   -- this state should be produced directly instead of first pushing
   -- the Postfix or the Closed onto the stack then push it back to
   -- the input in this step.
-      [Postfix _ [] _] -> S (Node [s,a]:ts) ss ([]:oss) MakeInert
-      [Closed _ [] _] ->  S (Node [s,a]:ts) ss ([]:oss) MakeInert
-      _ -> step' table sh
+    [Postfix _ [] _] -> S (Node [s,a]:tt) ss ([]:oss) MakeInert
+    _ -> step' table sh
   _ -> step' table sh
 
 step' :: Table -> Shunt -> Shunt
