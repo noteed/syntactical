@@ -13,10 +13,6 @@
 -- TODO is ! a + b allowed if ! and + have the same precedence?
 -- TODO allow specific operator table for internal operator holes
 -- (e.g. to reuse a same symbol with different fixity/precedecence).
--- TODO after some MatchedR, the first element on the output stack
--- is pushed back on the input (to be applied later). Maybe instead
--- it could be directly move to its correct location (on the stack or
--- on the output) so the type of the input stack can be on tokens.
 -- TODO use specific data types for the elements of each stack. 
 -- TODO replace the use of (head . findOp).
 

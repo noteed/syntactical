@@ -51,28 +51,13 @@ display = tail . display'
   display' (Op l) = ' ' : concat l
   display' (Node es) = ' ' : '⟨' : tail (concatMap display' es) ++ "⟩"
 
+isSym :: Tree -> Bool
 isSym (Sym _) = True
 isSym _ = False
 
+isOp :: Tree -> Bool
 isOp (Op _) = True
 isOp _ = False
-
-associativity :: Op -> Associativity
-associativity (Infix _ _ a _) = a
-
-prec :: Op -> Precedence
-prec (Infix _ _ _ p) = p
-prec (Prefix _ _ p) = p
-prec (Postfix _ _ p) = p
-
-nonAssoc :: Op -> Bool
-nonAssoc = (NonAssociative ==) . associativity
-
-lAssoc :: Op -> Bool
-lAssoc = (LeftAssociative ==) . associativity
-
-rAssoc :: Op -> Bool
-rAssoc = (RightAssociative ==) . associativity
 
 isInfix :: Op -> Bool
 isInfix (Infix _ _ _ _) = True
@@ -82,22 +67,17 @@ isInfix' :: Op -> [String] -> Bool
 isInfix' (Infix xs _ _ _) ys = xs == ys
 isInfix' _ _ = False
 
-infixSym s (Op ps) = concat $ intersperse s $ "" : ps ++ [""]
-prefixSym s (Op ps) = concat $ intersperse s $ ps ++ [""]
-postfixSym s (Op ps) = concat $ intersperse s $ "" : ps
-closedSym s (Op ps) = concat $ intersperse s ps
-
 lower :: Op -> Op -> Bool
-lower o1@(Infix [_] _ _ _) o2@(Infix _ [] _ _)
-    | nonAssoc o1 && nonAssoc o2 = error "cannot mix"
-    | lAssoc o1 && prec o1 <= prec o2 = True
-    | rAssoc o1 && prec o1 < prec o2 = True
-    | nonAssoc o1 && prec o1 <= prec o2 = True
-lower o1@(Infix [_] _ _ _) o2@(Prefix _ [] _)
-    | nonAssoc o1 && nonAssoc o2 = error "cannot mix"
-    | lAssoc o1 && prec o1 <= prec o2 = True
-    | rAssoc o1 && prec o1 < prec o2 = True
-    | nonAssoc o1 && prec o1 <= prec o2 = True
+lower (Infix [_] _ a1 p1) (Infix _ [] a2 p2)
+    | a1 == NonAssociative && a2 == NonAssociative = error "cannot mix"
+    | a1 == LeftAssociative && p1 <= p2 = True
+    | a1 == RightAssociative && p1 < p2 = True
+    | a1 == NonAssociative && p1 <= p2 = True
+lower (Infix [_] _ a1 p1) (Prefix _ [] p2)
+    | a1 == NonAssociative = error "cannot mix"
+    | a1 == LeftAssociative && p1 <= p2 = True
+    | a1 == RightAssociative && p1 < p2 = True
+    | a1 == NonAssociative && p1 <= p2 = True
 lower _ _ = False
 
 findOp :: String -> Table -> [Op]
@@ -125,6 +105,7 @@ findOp' op (Closed [] parts k:xs)
      let (l,r) = break' (== op) parts
      in Closed l r k : findOp' op xs
   | otherwise = findOp' op xs
+findOp' _ _ = error "findOps called on malformed operator table"
 
 findOps :: [String] -> Table -> [Op]
 findOps ops (Table t) = findOps' ops t
@@ -143,6 +124,7 @@ findOps' ops (Postfix [] parts p:xs)
 findOps' ops (Closed [] parts k:xs)
   | ops `isPrefixOf` parts = Closed ops (drop (length ops) parts) k : findOps' ops xs
   | otherwise = findOps' ops xs
+findOps' _ _ = error "findOps called on malformed operator table"
 
 break' :: (a -> Bool) -> [a] -> ([a], [a])
 break' p ls = case break p ls of
