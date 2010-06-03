@@ -160,30 +160,10 @@ step table sh = case sh of
   _ -> step' table sh
 
 step' :: Table -> Shunt -> Shunt
--- Everything is done and fine.
-step' _ sh@(S [] [] [[_]] _) = sh { rule = Done Success }
-
--- No more tokens on the input stack, just have to flush
--- the remaining applicators and/or operators.
-step' table sh@(S [] (s:ss) oo _) = case s of
-  Sym _              -> S [] ss (apply table s oo) FlushApp
-  Node _             -> S [] ss (apply table s oo) FlushApp
-  Op y -> case head $ findOps y table of
-    -- The operator has all its parts.
-    Infix _ [] _ _ -> S [] ss (apply table s oo) FlushOp
-    Prefix _ [] _  -> S [] ss (apply table s oo) FlushOp
-    Postfix _ [] _ -> S [] ss (apply table s oo) FlushOp
-    Closed _ [] _  -> S [] ss (apply table s oo) FlushOp
-    -- The operator is not complete.
-    Infix l r _ _  -> sh { rule = Done $ head r `MissingAfter` l }
-    Prefix l r _   -> sh { rule = Done $ head r `MissingAfter` l }
-    Postfix l r _  -> sh { rule = Done $ head r `MissingAfter` l }
-    Closed l r _   -> sh { rule = Done $ head r `MissingAfter` l }
-  Num _ -> error "can't happen: but TODO make a specific data type for the op stack"
 
 -- A number is on the input stack. It goes straight
 -- to the output unless we would end up trying to apply
--- another (parsed just before) number.
+-- another (parsed just before) number. The stack can be empty.
 step' table sh@(S tt@(t@(Num b):ts) st oo@(os:oss) _) = case sh of
   S _ (Sym _:_)  ((Num _:_):_) _     -> S ts st ((t:os):oss) Inert
   S _ (Node _:_) ((Num _:_):_) _     -> S ts st ((t:os):oss) Inert
@@ -192,27 +172,6 @@ step' table sh@(S tt@(t@(Num b):ts) st oo@(os:oss) _) = case sh of
     _                                -> S tt st oo (Done $ CantApply a b)
   S _ _          ((Num a:_):_) Inert -> S tt st oo (Done $ CantApply a b)
   _                                  -> S ts st ((t:os):oss) Inert
-
--- The applicator/operator stack is empty.
-step' table sh@(S (t:ts) [] oo ru) = case t of
-  Node _ -> S ts [t] ([]:oo) StackApp
-  Sym x -> case findOp x table of
-    []   -> S ts [t] ([]:oo) StackApp
-    -- x is the first sub-op, and the stack is empty
-    [Infix [_] _ _ _]
-      | ru == Initial -> error $ "missing sub-expression before " ++ x
-      | otherwise              -> S ts [Op [x]] oo StackOp
-    [Prefix [_] _ _]           -> S ts [Op [x]] oo StackL
-    [Postfix [_] _ _]          -> S ts [Op [x]] oo StackOp
-    [Closed [_] _ SExpression] -> S ts [Op [x]] ([]:oo) StackL
-    [Closed [_] _ _] -> S ts [Op [x]] oo StackL
-    [Infix l _ _ _]  -> sh { rule = Done $ init l `MissingBefore` last l }
-    [Prefix l _ _]   -> sh { rule = Done $ init l `MissingBefore` last l }
-    [Postfix l _ _]  -> sh { rule = Done $ init l `MissingBefore` last l }
-    [Closed l _ _]   -> sh { rule = Done $ init l `MissingBefore` last l }
-    _ -> S ts [Op [x]] oo StackOp
-  Num _ -> error "can't happen: Num is handled in a previous equation"
-  Op _ -> error "can't happen: but TODO make a specifi data type for the input stack"
 
 -- An applicator is on the input stack.
 step' table (S (t:ts) st@(s:_) oo@(os:oss) _)
@@ -321,6 +280,49 @@ step' table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
 --    _ -> error $ "TODO: This is a bug: the patterns should be exhaustive but" ++
 --           "(" ++ show t ++ ", " ++ show s ++ ") is not matched."
 
+-- No more tokens on the input stack, just have to flush
+-- the remaining applicators and/or operators.
+step' table sh@(S [] (s:ss) oo _) = case s of
+  Sym _              -> S [] ss (apply table s oo) FlushApp
+  Node _             -> S [] ss (apply table s oo) FlushApp
+  Op y -> case head $ findOps y table of
+    -- The operator has all its parts.
+    Infix _ [] _ _ -> S [] ss (apply table s oo) FlushOp
+    Prefix _ [] _  -> S [] ss (apply table s oo) FlushOp
+    Postfix _ [] _ -> S [] ss (apply table s oo) FlushOp
+    Closed _ [] _  -> S [] ss (apply table s oo) FlushOp
+    -- The operator is not complete.
+    Infix l r _ _  -> sh { rule = Done $ head r `MissingAfter` l }
+    Prefix l r _   -> sh { rule = Done $ head r `MissingAfter` l }
+    Postfix l r _  -> sh { rule = Done $ head r `MissingAfter` l }
+    Closed l r _   -> sh { rule = Done $ head r `MissingAfter` l }
+  Num _ -> error "can't happen: but TODO make a specific data type for the op stack"
+
+-- The applicator/operator stack is empty.
+step' table sh@(S (t:ts) [] oo ru) = case t of
+  Node _ -> S ts [t] ([]:oo) StackApp
+  Sym x -> case findOp x table of
+    []   -> S ts [t] ([]:oo) StackApp
+    -- x is the first sub-op, and the stack is empty
+    [Infix [_] _ _ _]
+      | ru == Initial -> error $ "missing sub-expression before " ++ x
+      | otherwise              -> S ts [Op [x]] oo StackOp
+    [Prefix [_] _ _]           -> S ts [Op [x]] oo StackL
+    [Postfix [_] _ _]          -> S ts [Op [x]] oo StackOp
+    [Closed [_] _ SExpression] -> S ts [Op [x]] ([]:oo) StackL
+    [Closed [_] _ _] -> S ts [Op [x]] oo StackL
+    [Infix l _ _ _]  -> sh { rule = Done $ init l `MissingBefore` last l }
+    [Prefix l _ _]   -> sh { rule = Done $ init l `MissingBefore` last l }
+    [Postfix l _ _]  -> sh { rule = Done $ init l `MissingBefore` last l }
+    [Closed l _ _]   -> sh { rule = Done $ init l `MissingBefore` last l }
+    _ -> S ts [Op [x]] oo StackOp
+  Num _ -> error "can't happen: Num is handled in a previous equation"
+  Op _ -> error "can't happen: but TODO make a specifi data type for the input stack"
+
+-- Everything is done and fine.
+step' _ sh@(S [] [] [[_]] _) = sh { rule = Done Success }
+
+-- This equation should never be reached; otherwise it is a bug.
 step' _ sh = sh { rule = Done Unexpected }
 
 applicator :: Table -> Tree -> Bool
