@@ -147,22 +147,11 @@ countInfix _ _ (Num _:_) =
   error "can't happen: but TODO make a specific data type for the op stack"
 
 step :: Table -> Shunt -> Shunt
-step table sh = case sh of
-  S tt (s@(Op y):ss) ([a]:oss) _ -> case findOps y table of
-  -- TODO this should not happen: a MatchedR should occur before:
-  -- this state should be produced directly instead of first pushing
-  -- the Postfix or the Closed onto the stack then push it back to
-  -- the input in this step.
-    [Postfix _ [] _] -> S (Node [s,a]:tt) ss ([]:oss) MakeInert
-    _ -> step' table sh
-  _ -> step' table sh
-
-step' :: Table -> Shunt -> Shunt
 
 -- A number is on the input stack. It goes straight
 -- to the output unless we would end up trying to apply
 -- another (parsed just before) number. The stack can be empty.
-step' table sh@(S tt@(t@(Num b):ts) st oo@(os:oss) _) = case sh of
+step table sh@(S tt@(t@(Num b):ts) st oo@(os:oss) _) = case sh of
   S _ (Sym _:_)  ((Num _:_):_) _     -> S ts st ((t:os):oss) Inert
   S _ (Node _:_) ((Num _:_):_) _     -> S ts st ((t:os):oss) Inert
   S _ (Op x:_)   ((Num a:_):_) Inert -> case findOps x table of
@@ -172,7 +161,7 @@ step' table sh@(S tt@(t@(Num b):ts) st oo@(os:oss) _) = case sh of
   _                                  -> S ts st ((t:os):oss) Inert
 
 -- An applicator is on the input stack.
-step' table (S (t:ts) st@(s:_) oo@(os:oss) _)
+step table (S (t:ts) st@(s:_) oo@(os:oss) _)
   | applicator table t = case s of
   Op y -> case findOps y table of
     [Closed [_] _ SExpression] -> S ts st ((t:os):oss) SExpr
@@ -183,7 +172,7 @@ step' table (S (t:ts) st@(s:_) oo@(os:oss) _)
 
 -- An operator part is on the input stack and an applicator is on
 -- the stack.
-step' table (S tt@((Sym x):ts) st@(s:ss) oo _)
+step table (S tt@((Sym x):ts) st@(s:ss) oo _)
   | applicator table s = case findOp x table of
   [Prefix [_] _ _] ->           S ts (Op [x]:st) oo StackL
   [Closed [_] _ SExpression] -> S ts (Op [x]:st) ([]:oo) StackL
@@ -191,7 +180,7 @@ step' table (S tt@((Sym x):ts) st@(s:ss) oo _)
   _ -> S tt ss (apply table s oo) FlushApp
 
 -- An operator part is on the input stack and on the stack.
-step' table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
+step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
   case (head $ findOp x table, head $ findOps y table) of
     (Infix [] _ _ _, _) -> error "can't happen"
     (Prefix [] _ _, _) -> error "can't happen"
@@ -227,10 +216,12 @@ step' table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
     (o1@(Postfix [_] [] p1), o2@(Prefix [_] [] p2))
       -- TODO use flushLower ?
       | p1 > p2 ->
-        S ts      (Op [x]:st)         oo          StackOp
+        let [a] = os
+        in S (Node [Op [x],a]:ts) st ([]:oss) MakeInert
       | p1 < p2 ->
-        S ts      (Op [x]:ss)           (apply table s oo) StackOp
-      | otherwise ->  S tt st oo (Done $ CantMix o1 o2)
+        let ([a]:oss') = apply table s oo
+        in S (Node [Op [x],a]:ts) ss ([]:oss') MakeInert
+      | otherwise -> S tt st oo (Done $ CantMix o1 o2)
     (Closed [_] _ SExpression, _) ->
       S ts        (Op [x]:st)         ([]:oo)        StackL
     (Closed l1 [] Discard, Closed l2 [r2] Discard)
@@ -280,7 +271,7 @@ step' table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
 
 -- No more tokens on the input stack, just have to flush
 -- the remaining applicators and/or operators.
-step' table sh@(S [] (s:ss) oo _) = case s of
+step table sh@(S [] (s:ss) oo _) = case s of
   Sym _              -> S [] ss (apply table s oo) FlushApp
   Node _             -> S [] ss (apply table s oo) FlushApp
   Op y -> case head $ findOps y table of
@@ -297,7 +288,7 @@ step' table sh@(S [] (s:ss) oo _) = case s of
   Num _ -> error "can't happen: but TODO make a specific data type for the op stack"
 
 -- The applicator/operator stack is empty.
-step' table sh@(S (t:ts) [] oo ru) = case t of
+step table sh@(S (t:ts) [] oo ru) = case t of
   Node _ -> S ts [t] ([]:oo) StackApp
   Sym x -> case findOp x table of
     []   -> S ts [t] ([]:oo) StackApp
@@ -306,6 +297,8 @@ step' table sh@(S (t:ts) [] oo ru) = case t of
       | ru == Initial -> error $ "missing sub-expression before " ++ x
       | otherwise              -> S ts [Op [x]] oo StackOp
     [Prefix [_] _ _]           -> S ts [Op [x]] oo StackL
+    [Postfix [_] [] _] ->
+      let ([a]:oss) = oo in       S (Node [Op [x],a]:ts) [] ([]:oss) MakeInert
     [Postfix [_] _ _]          -> S ts [Op [x]] oo StackOp
     [Closed [_] _ SExpression] -> S ts [Op [x]] ([]:oo) StackL
     [Closed [_] _ _] -> S ts [Op [x]] oo StackL
@@ -318,10 +311,10 @@ step' table sh@(S (t:ts) [] oo ru) = case t of
   Op _ -> error "can't happen: but TODO make a specifi data type for the input stack"
 
 -- Everything is done and fine.
-step' _ sh@(S [] [] [[_]] _) = sh { rule = Done Success }
+step _ sh@(S [] [] [[_]] _) = sh { rule = Done Success }
 
 -- This equation should never be reached; otherwise it is a bug.
-step' _ sh = sh { rule = Done Unexpected }
+step _ sh = sh { rule = Done Unexpected }
 
 applicator :: Table -> Tree -> Bool
 applicator table (Sym x) = findOp x table == []
