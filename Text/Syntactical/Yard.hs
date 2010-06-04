@@ -16,7 +16,7 @@
 -- TODO use specific data types for the elements of each stack. 
 -- TODO replace the use of (head . findOp).
 -- TODO test more infix ops before a postfix (e.g. a + b * c _/ d /.)
--- to exercice flushLower.
+-- to exercice flushHigher.
 -- TODO use HPC to see if tests cover the code.
 -- TODO maybe feed random tokens to the algorithm to see if it can crash.
 -- TODO use hlint.
@@ -199,9 +199,9 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
         S ts      (Op l1:ss)            oo          ContinueOp
     (o1@(Infix [_] _ _ _), Infix _ [] _ _)
       | stackedOp ru -> S tt st oo (Done $ EmptyHole (last y) x)
-      | otherwise -> flushLower table o1 x ts st oo
+      | otherwise -> flushHigher table o1 x ts st oo
     (o1@(Infix _ _ _ _), Prefix _ _ _) ->
-      flushLower table o1 x ts st oo
+      flushHigher table o1 x ts st oo
     (Prefix [_] _ _, Infix _ _ _ _) ->
         S ts      (Op [x]:st)         oo          StackL
     (Prefix l1 _ _, Infix _ _ _ _) ->
@@ -218,7 +218,7 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
     (Prefix [_] _ _, Prefix _ [] _) ->
         S ts      (Op [x]:st)         oo          StackL
     (o1@(Postfix [_] [] p1), o2@(Prefix [_] [] p2))
-      -- TODO use flushLower ?
+      -- TODO use flushHigher ?
       | p1 > p2 ->
         let [a] = os
         in S (Node [Op [x],a]:ts) st ([]:oss) MakeInert
@@ -337,14 +337,14 @@ applicator table (Sym x) = findOp x table == []
 applicator _ (Node _) = True
 applicator _ _ = False
 
-flushLower :: Table -> Op -> String -> [Tree] -> [Tree] -> [[Tree]] -> Shunt
-flushLower table o1 x ts (s@(Op y):ss) oss = case head $ findOps y table of
+flushHigher :: Table -> Op -> String -> [Tree] -> [Tree] -> [[Tree]] -> Shunt
+flushHigher table o1 x ts (s@(Op y):ss) oss = case head $ findOps y table of
   o2
     | o1 `lower` o2 ->
-      flushLower table o1 x ts ss (apply table s oss)
+      flushHigher table o1 x ts ss (apply table s oss)
     | otherwise ->
       S ts (Op [x]:s:ss) oss FlushOp
-flushLower _ _ x ts ss oss =
+flushHigher _ _ x ts ss oss =
       S ts (Op [x]:ss)   oss StackOp
 
 apply :: Table -> Tree -> [[Tree]] -> [[Tree]]
