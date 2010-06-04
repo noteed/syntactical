@@ -15,6 +15,12 @@
 -- (e.g. to reuse a same symbol with different fixity/precedecence).
 -- TODO use specific data types for the elements of each stack. 
 -- TODO replace the use of (head . findOp).
+-- TODO test more infix ops before a postfix (e.g. a + b * c _/ d /.)
+-- to exercice flushLower.
+-- TODO use HPC to see if tests cover the code.
+-- TODO maybe feed random tokens to the algorithm to see if it can crash.
+-- TODO use hlint.
+-- TODO write more realistic example (for a Haskell-like syntax)
 
 module Text.Syntactical.Yard where
 
@@ -78,7 +84,7 @@ stackedOp ContinueOp = True
 stackedOp _ = False
 
 data Shunt = S {
-    input :: [Tree]    -- list of token (Nodes can be pushed back.)
+    input :: [Tree]    -- list of tokens (Nodes can be pushed back.)
   , stack :: [Tree]    -- stack of operators and applicators
   , output :: [[Tree]] -- stack of stacks
   , rule :: Rule
@@ -200,6 +206,8 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
         S ts      (Op [x]:st)         oo          StackL
     (Prefix l1 _ _, Infix _ _ _ _) ->
       S tt st oo (Done $ init l1 `MissingBefore` last l1)
+    (Prefix [_] _ _, Prefix _ _ _) ->
+        S ts      (Op [x]:st)         oo          StackL
     (Prefix l1 _ _, Prefix l2 (r2:_) _)
       | l2++[r2] == l1 && stackedOp ru ->
         S tt st oo (Done $ EmptyHole (last y) x)
@@ -218,10 +226,9 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
         let ([a]:oss') = apply table s oo
         in S (Node [Op [x],a]:ts) ss ([]:oss') MakeInert
       | otherwise -> S tt st oo (Done $ CantMix o1 o2)
-    (o1@(Postfix l1 [] _), o2@(Postfix l2 [r2] _))
+    ((Postfix l1 [] _), (Postfix l2 [r2] _))
       | l2++[r2] == l1 && stackedOp ru ->
         S tt st oo (Done $ EmptyHole (last y) x)
--- TODO use flushLower ?
       | l2++[r2] == l1 ->
         S (o:ts)           ss       (os':oss')      MatchedR
       | otherwise ->
