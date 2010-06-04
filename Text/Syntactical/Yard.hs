@@ -218,6 +218,15 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
         let ([a]:oss') = apply table s oo
         in S (Node [Op [x],a]:ts) ss ([]:oss') MakeInert
       | otherwise -> S tt st oo (Done $ CantMix o1 o2)
+    (o1@(Postfix l1 [] _), o2@(Postfix l2 [r2] _))
+      | l2++[r2] == l1 && stackedOp ru ->
+        S tt st oo (Done $ EmptyHole (last y) x)
+-- TODO use flushLower ?
+      | l2++[r2] == l1 ->
+        S (o:ts)           ss       (os':oss')      MatchedR
+      | otherwise ->
+        S tt st oo (Done $ missingPrefix l1 l2)
+        where ((o:os'):oss') = apply table (Op l1) oo
     (Closed [_] _ SExpression, _) ->
       S ts        (Op [x]:st)         ([]:oo)        StackL
     (Closed l1 [] Discard, Closed l2 [r2] Discard)
@@ -256,14 +265,18 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
       S ts                st              ((t:os):oss)           SExpr
     (Infix [_] _ _ _, Closed _ _ _)
       | ru == StackL -> error $ "missing sub-expression before " ++ x
+    (_, Postfix _ _ _) ->
+        S ts      (Op [x]:st)         oo          StackOp
     (_, Closed _ _ _) ->
         S ts      (Op [x]:st)         oo          StackOp
+    (Postfix _ [] _, _) ->
+        S tt            ss                  (apply table s oo) FlushOp
     (Closed _ [] _, _) ->
         S tt            ss                  (apply table s oo) FlushOp
     (Closed _ _ _, _) ->
         S ts      (Op [x]:st)           oo StackOp
---    _ -> error $ "TODO: This is a bug: the patterns should be exhaustive but" ++
---           "(" ++ show t ++ ", " ++ show s ++ ") is not matched."
+    _ -> error $ "TODO: This is a bug: the patterns should be exhaustive but" ++
+           "(" ++ show t ++ ", " ++ show s ++ ") is not matched."
 
 -- No more tokens on the input stack, just have to flush
 -- the remaining applicators and/or operators.

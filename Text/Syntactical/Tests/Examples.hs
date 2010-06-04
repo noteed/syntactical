@@ -19,6 +19,7 @@ table0 = Table
  , Postfix [] ["°"] 7
  , Postfix [] ["%"] 8
  , Postfix [] ["!"] 9
+ , Postfix [] ["_/","/."] 9
  , Prefix [] ["if","then","else"] 3
  , Closed [] ["</","/>"] Keep
  , Closed [] ["[","|","]"] Keep
@@ -155,6 +156,9 @@ testsTable0 = [
 
   , ("# true ? 1 : 0", "⟨?: ⟨# true⟩ 1 0⟩")
 
+  , ("a _/ b /.", "⟨_//. a b⟩")
+  , ("a _/ 1 + 2 /.", "⟨_//. a ⟨+ 1 2⟩⟩")
+
   -- TODO , ("⟨⟩", "⟨⟩")
   ]
 
@@ -180,6 +184,8 @@ testsTable0' =
   , ("[ a | ]", EmptyHole "|" "]")
   , ("true ? 1 : true then 1 else 0", MissingBefore ["if"] "then")
   , ("true ? 1 : then 1 else 0", MissingBefore ["if"] "then")
+  , ("a _/ /.", EmptyHole "_/" "/.")
+  , ("a _/ b", MissingAfter "/." ["_/"])
 -- TODO cases above with parenthesis or in bigger expression.
 -- TODO obviously those are not success, but I have to
 -- create and recognize the error cases.
@@ -191,6 +197,7 @@ testsTable0' =
   , ("|", Success)
   , ("[", Success)
   , ("]", Success)
+  , ("_/ b /.", Success)
 -}
   ]
 
@@ -226,6 +233,6 @@ separate' ('⟩':cs) = " ⟩ " ++ separate' cs
 separate' (c:cs) = c : separate' cs
 separate' [] = []
 
-token (c:cs) | c `elem` ['a'..'z'] ++ "()⟨⟩+-*/?:#i°%!<>[]|,{};=\"" = Sym (c:cs)
+token (c:cs) | c `elem` ['a'..'z'] ++ "()⟨⟩+-*/?:#i°%!<>[]|,{};=\"._" = Sym (c:cs)
              | otherwise = Num (read [c])
 
