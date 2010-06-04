@@ -16,11 +16,11 @@
 -- TODO use specific data types for the elements of each stack. 
 -- TODO replace the use of (head . findOp).
 
-module Language.Syntactical.Yard where
+module Text.Syntactical.Yard where
 
 import Data.List (intersperse)
 
-import Language.Syntactical.Data
+import Text.Syntactical.Data
 
 -- An applicator is a non-operator symbol that is applied
 -- to some arguments. When such a symbol is read, it is
@@ -302,7 +302,7 @@ step table sh@(S (t:ts) [] oo ru) = case t of
     [Prefix l _ _]   -> sh { rule = Done $ init l `MissingBefore` last l }
     [Postfix l _ _]  -> sh { rule = Done $ init l `MissingBefore` last l }
     [Closed l _ _]   -> sh { rule = Done $ init l `MissingBefore` last l }
-    _ -> S ts [Op [x]] oo StackOp
+    _ -> error "can't happen" -- a single op in the list is returned.
   Num _ -> error "can't happen: Num is handled in a previous equation"
   Op _ -> error "can't happen: but TODO make a specifi data type for the input stack"
 

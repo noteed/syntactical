@@ -1,7 +1,7 @@
-module Language.Syntactical.Tests.Examples where
+module Text.Syntactical.Tests.Examples where
 
-import Language.Syntactical
-import Language.Syntactical.Yard (Done(..))
+import Text.Syntactical
+import Text.Syntactical.Yard (Done(..))
 
 table0 :: Table
 table0 = Table

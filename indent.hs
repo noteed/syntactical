@@ -1,6 +1,6 @@
 module Main where
 
-import Language.Syntactical.Indent (go', flatten)
+import Text.Syntactical.Indent (go', flatten)
 
 echo :: String -> String
 echo s = case go' s of

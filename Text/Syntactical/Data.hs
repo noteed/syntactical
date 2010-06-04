@@ -1,4 +1,4 @@
-module Language.Syntactical.Data where
+module Text.Syntactical.Data where
 
 import Data.List
 

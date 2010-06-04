@@ -1,4 +1,4 @@
-module Language.Syntactical.Indent where
+module Text.Syntactical.Indent where
 
 import Text.ParserCombinators.Parsec
 import Control.Monad (unless)

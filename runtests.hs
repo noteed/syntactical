@@ -4,8 +4,8 @@ import Test.Framework (defaultMain, testGroup, Test)
 import Test.Framework.Providers.HUnit
 import Test.HUnit hiding (Test)
 
-import Language.Syntactical.Yard
-import Language.Syntactical.Tests.Examples
+import Text.Syntactical.Yard
+import Text.Syntactical.Tests.Examples
 
 main :: IO ()
 main = defaultMain
@@ -13,10 +13,10 @@ main = defaultMain
   ]
 
 testYard :: Test
-testYard = testGroup "Language.Syntactical.Yard"
-  [ testGroup "Language.Syntactical.Tests.Examples - table0" $
+testYard = testGroup "Text.Syntactical.Yard"
+  [ testGroup "Text.Syntactical.Tests.Examples - table0" $
     map (helper parse0) testsTable0
-  , testGroup "Language.Syntactical.Tests.Examples - table0 - bad input" $
+  , testGroup "Text.Syntactical.Tests.Examples - table0 - bad input" $
     map (helper' parse0) testsTable0'
   ]
 

@@ -10,7 +10,7 @@ Name:                syntactical
 Version:             0.1
 
 -- A short (one-line) description of the package.
-Synopsis:            Dead-simple syntax library
+Synopsis:            Dead-simple parsing library
 
 -- A longer description of the package.
 -- Description:         
@@ -34,7 +34,7 @@ Maintainer:          noteed@gmail.com
 -- Stability of the pakcage (experimental, provisional, stable...)
 Stability:           Experimental
 
-Category:            Language
+Category:            Parsing
 
 Build-type:          Simple
 
@@ -48,10 +48,10 @@ Cabal-version:       >=1.2
 
 Library
   -- Modules exported by the library.
-  Exposed-modules:     Language.Syntactical.Data,
-                       Language.Syntactical.Indent,
-                       Language.Syntactical.Yard
-                       Language.Syntactical
+  Exposed-modules:     Text.Syntactical.Data,
+                       Text.Syntactical.Indent,
+                       Text.Syntactical.Yard
+                       Text.Syntactical
   
   -- Packages needed in order to build this package.
   Build-depends:    base >= 4.0, parsec
