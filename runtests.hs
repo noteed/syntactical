@@ -3,14 +3,21 @@ module Main where
 import Test.Framework (defaultMain, testGroup, Test)
 import Test.Framework.Providers.HUnit
 import Test.HUnit hiding (Test)
+import System.Environment (getArgs)
 
 import Text.Syntactical.Yard
 import Text.Syntactical.Tests.Examples
 
 main :: IO ()
-main = defaultMain
-  [ testYard
-  ]
+main = do
+  args <- getArgs
+  case args of
+    [s] -> case parse0 s of
+      Right e -> print e
+      Left f -> putStrLn $ showFailure f
+    _ -> defaultMain
+      [ testYard
+      ]
 
 testYard :: Test
 testYard = testGroup "Text.Syntactical.Yard"

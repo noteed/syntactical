@@ -20,7 +20,7 @@
 -- TODO write more realistic example (for a Haskell-like syntax)
 
 module Text.Syntactical.Yard
-  ( shunt, steps, Result(..), Failure(..)
+  ( shunt, steps, Result(..), Failure(..), showFailure
   ) where
 
 import Data.List (intersperse)
@@ -69,9 +69,8 @@ isDone sh = case rule sh of
   Done _ -> True
   _ -> False
 
-showResult :: Result -> [Char]
-showResult Success = "Parsing successful"
-showResult (Failure f) = case f of
+showFailure :: Failure -> String
+showFailure f = case f of
   MissingAfter p ps -> "Parse error: missing operator part " ++
     p ++ " after " ++ concat (intersperse " " ps)
   MissingBefore ps p -> "Parse error: missing operator parts " ++
