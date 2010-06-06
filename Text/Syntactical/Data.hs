@@ -79,15 +79,18 @@ isInfix' :: Op -> [String] -> Bool
 isInfix' (Infix xs _ _ _) ys = xs == ys
 isInfix' _ _ = False
 
+isSExpression :: Op -> Bool
 isSExpression (Closed _ _ SExpression) = True
 isSExpression _ = False
 
+continue :: Op -> Op -> Bool
 continue (Infix l1 _ _ _) (Infix l2 (r2:_) _ _) = l2++[r2] == l1
 continue (Prefix l1 _ _) (Prefix l2 (r2:_) _) = l2++[r2] == l1
 continue (Postfix l1 _ _) (Postfix l2 (r2:_) _) = l2++[r2] == l1
 continue (Closed l1 _ _) (Closed l2 (r2:_) _) = l2++[r2] == l1
 continue _ _ = False
 
+full :: Op -> Bool
 full (Infix _ [] _ _) = True
 full (Prefix _ [] _) = True
 full (Postfix _ [] _) = True
@@ -126,24 +129,24 @@ findOp op (Table t) = findOp' op t
 
 findOp' :: String -> [Op] -> [Op]
 findOp' _ [] = []
-findOp' op (Infix [] parts a p:xs)
-  | op `elem` parts =
-     let (l,r) = break' (== op) parts
+findOp' op (Infix [] pts a p:xs)
+  | op `elem` pts =
+     let (l,r) = break' (== op) pts
      in Infix l r a p : findOp' op xs
   | otherwise = findOp' op xs
-findOp' op (Prefix [] parts p:xs)
-  | op `elem` parts =
-     let (l,r) = break' (== op) parts
+findOp' op (Prefix [] pts p:xs)
+  | op `elem` pts =
+     let (l,r) = break' (== op) pts
      in Prefix l r p : findOp' op xs
   | otherwise = findOp' op xs
-findOp' op (Postfix [] parts p:xs)
-  | op `elem` parts =
-     let (l,r) = break' (== op) parts
+findOp' op (Postfix [] pts p:xs)
+  | op `elem` pts =
+     let (l,r) = break' (== op) pts
      in Postfix l r p : findOp' op xs
   | otherwise = findOp' op xs
-findOp' op (Closed [] parts k:xs)
-  | op `elem` parts =
-     let (l,r) = break' (== op) parts
+findOp' op (Closed [] pts k:xs)
+  | op `elem` pts =
+     let (l,r) = break' (== op) pts
      in Closed l r k : findOp' op xs
   | otherwise = findOp' op xs
 findOp' _ _ = error "findOps called on malformed operator table"
@@ -153,17 +156,17 @@ findOps ops (Table t) = findOps' ops t
 
 findOps' :: [String] -> [Op] -> [Op]
 findOps' _ [] = []
-findOps' ops (Infix [] parts a p:xs)
-  | ops `isPrefixOf` parts = Infix ops (drop (length ops) parts) a p : findOps' ops xs
+findOps' ops (Infix [] pts a p:xs)
+  | ops `isPrefixOf` pts = Infix ops (drop (length ops) pts) a p : findOps' ops xs
   | otherwise = findOps' ops xs
-findOps' ops (Prefix [] parts p:xs)
-  | ops `isPrefixOf` parts = Prefix ops (drop (length ops) parts) p : findOps' ops xs
+findOps' ops (Prefix [] pts p:xs)
+  | ops `isPrefixOf` pts = Prefix ops (drop (length ops) pts) p : findOps' ops xs
   | otherwise = findOps' ops xs
-findOps' ops (Postfix [] parts p:xs)
-  | ops `isPrefixOf` parts = Postfix ops (drop (length ops) parts) p : findOps' ops xs
+findOps' ops (Postfix [] pts p:xs)
+  | ops `isPrefixOf` pts = Postfix ops (drop (length ops) pts) p : findOps' ops xs
   | otherwise = findOps' ops xs
-findOps' ops (Closed [] parts k:xs)
-  | ops `isPrefixOf` parts = Closed ops (drop (length ops) parts) k : findOps' ops xs
+findOps' ops (Closed [] pts k:xs)
+  | ops `isPrefixOf` pts = Closed ops (drop (length ops) pts) k : findOps' ops xs
   | otherwise = findOps' ops xs
 findOps' _ _ = error "findOps called on malformed operator table"
 
@@ -171,6 +174,15 @@ break' :: (a -> Bool) -> [a] -> ([a], [a])
 break' p ls = case break p ls of
   (_, []) -> error "break': no element in l satisfying p"
   (l, r:rs) -> (l ++ [r], rs)
+
+applicator :: Table -> Tree -> Bool
+applicator table (Sym x) = findOp x table == []
+applicator _ (Node _) = True
+applicator _ _ = False
+
+findOperators :: Table -> String -> [String] -> (Op, Op)
+findOperators table x y =
+ (head $ findOp x table, head $ findOps y table)
 
 -- Parts
 -- Examples:
@@ -243,6 +255,7 @@ part (Closed [_] _ _) = First False
 part (Closed _ [] _) = Last False
 part (Closed _ _ _) = Middle
 
+parts :: Op -> ([String], [String])
 parts (Infix l r _ _) = (l,r)
 parts (Prefix l r _) = (l,r)
 parts (Postfix l r _) = (l,r)

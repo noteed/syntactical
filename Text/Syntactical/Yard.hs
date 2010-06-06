@@ -109,14 +109,6 @@ steps table ts = do
 initial :: [Tree] -> Shunt
 initial ts = S ts [] [[]] Initial
 
-isLeft :: Either a b -> Bool
-isLeft (Left _) = True
-isLeft _ = False
-
-isRight :: Either a b -> Bool
-isRight (Right _) = True
-isRight _ = False
-
 shunt :: Table -> [Tree] -> Either Shunt Tree
 shunt table ts = case fix $ initial ts of
   S [] [] [[o']] (Done Success) -> Right o'
@@ -152,24 +144,18 @@ countInfix _ _ (Num _:_) =
 
 step :: Table -> Shunt -> Shunt
 
-step table (S tt st@(s@(Op y):ss) oo@(os:oss) ru) |
+step table (S tt (s@(Op y):ss) oo@(os:oss) _) |
   let o2 = head $ findOps y table
       (_,r2) = parts o2
       end = null r2
-  in end && isPostfix o2
-  =
-  S (o:tt) ss (os':oss') MatchedR
-  where ((o:os'):oss') = apply table s oo
-
-step table (S tt st@(s@(Op y):ss) oo@(os:oss) ru) |
-  let o2 = head $ findOps y table
-      (_,r2) = parts o2
-      end = null r2
-  in end && isClosed o2
+  in end && (isClosed o2 || isPostfix o2)
   = case head $ findOps y table of
-  Closed _ _ Discard -> S (o:tt) ss (os':oss) MatchedR where (o:os') = os
-  Closed _ _ DistfixAndDiscard -> S (o:tt) ss (os':oss) MatchedR where (o:os') = os
-  _ -> S (o:tt) ss (os':oss') MatchedR where ((o:os'):oss') = apply table s oo
+  Closed _ _ Discard -> S (o:tt) ss (os':oss) MatchedR
+    where (o:os') = os
+  Closed _ _ DistfixAndDiscard -> S (o:tt) ss (os':oss) MatchedR
+    where (o:os') = os
+  _ -> S (o:tt) ss (os':oss') MatchedR
+    where ((o:os'):oss') = apply table s oo
 
 -- A number is on the input stack. It goes straight
 -- to the output unless we would end up trying to apply
@@ -204,18 +190,14 @@ step table (S tt@((Sym x):ts) st@(s:ss) oo _)
 
 -- An operator part is on the input stack and on the stack.
 step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
-  let o1 =  head $ findOp x table
-      o2 = head $ findOps y table
+  let (o1, o2) = findOperators table x y
       pt1 = part o1
       pt2 = part o2
       leftHole1 = leftHole pt1
-      rightHole1 = rightHole pt1
-      leftHole2 = leftHole pt2
       rightHole2 = rightHole pt2
-      (l1,r1) = parts o1
+      (l1,_) = parts o1
       (l2,r2:_) = parts o2
       new = length l1 == 1
-      end = null r1
   in
   case (o1, o2) of
     (Infix [] _ _ _, _) -> error "can't happen"
@@ -224,11 +206,11 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
     (Closed [] _ _, _) -> error "can't happen"
 
     (Closed [_] _ DistfixAndDiscard, Closed [_] _ SExpression) ->
-      S ts            (Op [x]:st)       oo            StackL
+      S ts (Op [x]:st) oo StackL
     (Closed [_] _ Distfix, Closed [_] _ SExpression) ->
-      S ts            (Op [x]:st)       oo            StackL
+      S ts (Op [x]:st) oo StackL
     (Closed [_] _ SExpression, _) ->
-      S ts        (Op [x]:st)         ([]:oo)        StackL
+      S ts (Op [x]:st) ([]:oo) StackL
     (Closed _ [] SExpression, Closed _ [_] SExpression)
       | l2++[r2] == l1 && stackedOp ru ->
         S (Sym "⟨⟩":ts) ss (h:oss') MakeInert
@@ -249,7 +231,9 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
 
     _ | not leftHole1 && new -> S ts (Op [x]:st) oo StackL
 
-    _ -> flushHigher table o1 x tt o2 st oo
+    _ | o1 `lower` o2 -> S tt ss (apply table s oo) FlushOp
+
+    _ -> S ts (Op [x]:st) oo StackOp
 
 -- No more tokens on the input stack, just have to flush
 -- the remaining applicators and/or operators.
@@ -297,17 +281,6 @@ step _ sh@(S [] [] [[_]] _) = sh { rule = Done Success }
 
 -- This equation should never be reached; otherwise it is a bug.
 step _ sh = sh { rule = Done Unexpected }
-
-applicator :: Table -> Tree -> Bool
-applicator table (Sym x) = findOp x table == []
-applicator _ (Node _) = True
-applicator _ _ = False
-
-flushHigher table o1 x (t:ts) o2 (s:ss) oo
-  | o1 `lower` o2 =
-    S (t:ts) ss (apply table s oo) FlushOp
-  | otherwise =
-    S ts (Op [x]:s:ss) oo StackOp
 
 apply :: Table -> Tree -> [[Tree]] -> [[Tree]]
 apply table s@(Op y) (os:oss) =
