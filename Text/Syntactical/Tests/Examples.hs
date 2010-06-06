@@ -113,7 +113,6 @@ testsTable0 = [
   , ("a ! !", "⟨! ⟨! a⟩⟩")
 
   , ("# a °", "⟨° ⟨# a⟩⟩")
---  , ("# a %", Error "precedence cannot be mixed")
   , ("# a !", "⟨# ⟨! a⟩⟩")
   , ("a ! # b", "⟨⟨! a⟩ ⟨# b⟩⟩")
 
@@ -225,6 +224,8 @@ testsTable0' =
   , (")", )
   , ("⟨", )
   , ("⟩", )
+  , ("1 (1 + 2)", ) -- The equation with a number on the output stack should be extended.
+  , ("# a %", Error "precedence cannot be mixed")
 -}
   ]
 

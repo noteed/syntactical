@@ -152,11 +152,8 @@ countInfix _ _ (Num _:_) =
 
 step :: Table -> Shunt -> Shunt
 
-head' (x:_) _ = x
-head' [] y = error $ "Ouch my head! " ++ show y
-
 step table (S tt st@(s@(Op y):ss) oo@(os:oss) ru) |
-  let o2 = head' (findOps y table) y
+  let o2 = head $ findOps y table
       (_,r2) = parts o2
       end = null r2
   in end && isPostfix o2
