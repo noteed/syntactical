@@ -6,14 +6,11 @@
 -- blanks between arguments).
 -- TODO make sure the rules reflect what's going on, a same
 -- rule should be associated to a same behavior.
--- TODO the precedence comparison should depends on the
--- associativity even for Pre/Postfix (see 'lower').
 -- (TODO a pre/postfix operator can be associative or non-associative.)
 -- TODO factorize
 -- TODO is ! a + b allowed if ! and + have the same precedence?
 -- TODO allow specific operator table for internal operator holes
 -- (e.g. to reuse a same symbol with different fixity/precedecence).
--- TODO use specific data types for the elements of each stack. 
 -- TODO replace the use of (head . findOp).
 -- TODO test more infix ops before a postfix (e.g. a + b * c _/ d /.)
 -- to exercice flushHigher.
@@ -22,7 +19,9 @@
 -- TODO use hlint.
 -- TODO write more realistic example (for a Haskell-like syntax)
 
-module Text.Syntactical.Yard where
+module Text.Syntactical.Yard
+  ( shunt, steps, Result(..), Failure(..)
+  ) where
 
 import Data.List (intersperse)
 
@@ -47,12 +46,16 @@ data Rule = Initial
                        -- at the top of the stack
           | MatchedR   -- handle the last part of a closed operator
           | SExpr      -- build an s-expression
-          | Done Done
+          | Done Result
   deriving (Show, Eq)
 
-data Done =
+data Result =
     Success    -- everything is successfuly parsed
-  | MissingBefore [String] String -- error case: missing parts before part
+  | Failure Failure
+  deriving (Eq, Show)
+
+data Failure =
+    MissingBefore [String] String -- error case: missing parts before part
   | MissingAfter String [String]  -- error case: missing part before parts
   | CantMix Op Op -- error case: can't mix two operators
   | CantApply Int Int -- error case: can't apply number to number
@@ -66,9 +69,9 @@ isDone sh = case rule sh of
   Done _ -> True
   _ -> False
 
-showDone :: Done -> [Char]
-showDone d = case d of
-  Success -> "Parsing successful"
+showResult :: Result -> [Char]
+showResult Success = "Parsing successful"
+showResult (Failure f) = case f of
   MissingAfter p ps -> "Parse error: missing operator part " ++
     p ++ " after " ++ concat (intersperse " " ps)
   MissingBefore ps p -> "Parse error: missing operator parts " ++
@@ -78,6 +81,9 @@ showDone d = case d of
   EmptyHole a b -> "Parse error: no sub-expression between " ++ a ++ " and " ++ b
   Incomplete s -> "Parse error: missing operator parts after " ++ show s
   Unexpected -> "Parsing raised a bug"
+
+failure :: Failure -> Rule
+failure f = Done $ Failure f
 
 stackedOp :: Rule -> Bool
 stackedOp StackL = True
@@ -109,38 +115,13 @@ steps table ts = do
 initial :: [Tree] -> Shunt
 initial ts = S ts [] [[]] Initial
 
-shunt :: Table -> [Tree] -> Either Shunt Tree
+shunt :: Table -> [Tree] -> Either Failure Tree
 shunt table ts = case fix $ initial ts of
   S [] [] [[o']] (Done Success) -> Right o'
-  s -> Left s
+  S _ _ _ (Done (Failure f)) -> Left f
+  _ -> error "can't happen"
   where fix s = let s' = step table s in
-                if sat table s' then if isDone s' then s' else fix s'
-                                else error "invariants not satified"
-
-sat :: Table -> Shunt -> Bool
-sat table s = all (\i -> i table s) invariants
-
-invariants :: [Table -> Shunt -> Bool]
-invariants =
-  [ -- inv1
-  ]
-
-inv1 :: Table -> Shunt -> Bool
-inv1 table (S _ (Op x:ss) oss Inert) =
-  case findOps x table of
-    [Infix _ _ _ _] -> countInfix table 0 (Op x:ss) + 1 == length (head oss)
-    _ -> True
-inv1 _ _ = True
-
-countInfix :: Table -> Int -> [Tree] -> Int
-countInfix _ acc [] = acc
-countInfix table acc (Op x:ss) = case findOps x table of
-  [Infix _ _ _ _] -> countInfix table (acc + 1) ss
-  _ -> countInfix table acc ss
-countInfix table acc (Sym _:ss) = countInfix table acc ss
-countInfix table acc (Node _:ss) = countInfix table acc ss
-countInfix _ _ (Num _:_) =
-  error "can't happen: but TODO make a specific data type for the op stack"
+                if isDone s' then s' else fix s'
 
 step :: Table -> Shunt -> Shunt
 
@@ -165,8 +146,8 @@ step table sh@(S tt@(t@(Num b):ts) st oo@(os:oss) _) = case sh of
   S _ (Node _:_) ((Num _:_):_) _     -> S ts st ((t:os):oss) Inert
   S _ (Op x:_)   ((Num a:_):_) Inert -> case findOps x table of
     [Closed [_] _ SExpression]       -> S ts st ((t:os):oss) Inert
-    _                                -> S tt st oo (Done $ CantApply a b)
-  S _ _          ((Num a:_):_) Inert -> S tt st oo (Done $ CantApply a b)
+    _                                -> S tt st oo (failure $ CantApply a b)
+  S _ _          ((Num a:_):_) Inert -> S tt st oo (failure $ CantApply a b)
   _                                  -> S ts st ((t:os):oss) Inert
 
 -- An applicator is on the input stack.
@@ -222,10 +203,10 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
       S ts st ((t:os):oss) SExpr
 
     _ | not new && not (full o2) && not (o1 `continue` o2) ->
-       S tt st oo (Done $ Incomplete l2)
+       S tt st oo (failure $ Incomplete l2)
 
     _ | rightHole2 && leftHole1 && stackedOp ru ->
-      S tt st oo (Done $ EmptyHole (last y) x)
+      S tt st oo (failure $ EmptyHole (last y) x)
 
     _ | o1 `continue` o2 -> S ts (Op l1:ss) oo ContinueOp
 
@@ -247,10 +228,10 @@ step table sh@(S [] (s:ss) oo _) = case s of
     --Postfix _ [] _ -> -- handled by the very first equation
     --Closed _ [] _  -> -- handled by the very first equation
     -- The operator is not complete.
-    Infix l r _ _  -> sh { rule = Done $ head r `MissingAfter` l }
-    Prefix l r _   -> sh { rule = Done $ head r `MissingAfter` l }
-    Postfix l r _  -> sh { rule = Done $ head r `MissingAfter` l }
-    Closed l r _   -> sh { rule = Done $ head r `MissingAfter` l }
+    Infix l r _ _  -> sh { rule = failure $ head r `MissingAfter` l }
+    Prefix l r _   -> sh { rule = failure $ head r `MissingAfter` l }
+    Postfix l r _  -> sh { rule = failure $ head r `MissingAfter` l }
+    Closed l r _   -> sh { rule = failure $ head r `MissingAfter` l }
   Num _ -> error "can't happen: but TODO make a specific data type for the op stack"
 
 -- The applicator/operator stack is empty.
@@ -268,10 +249,10 @@ step table sh@(S (t:ts) [] oo ru) = case t of
     [Postfix [_] _ _]          -> S ts [Op [x]] oo StackOp
     [Closed [_] _ SExpression] -> S ts [Op [x]] ([]:oo) StackL
     [Closed [_] _ _] -> S ts [Op [x]] oo StackL
-    [Infix l _ _ _]  -> sh { rule = Done $ init l `MissingBefore` last l }
-    [Prefix l _ _]   -> sh { rule = Done $ init l `MissingBefore` last l }
-    [Postfix l _ _]  -> sh { rule = Done $ init l `MissingBefore` last l }
-    [Closed l _ _]   -> sh { rule = Done $ init l `MissingBefore` last l }
+    [Infix l _ _ _]  -> sh { rule = failure $ init l `MissingBefore` last l }
+    [Prefix l _ _]   -> sh { rule = failure $ init l `MissingBefore` last l }
+    [Postfix l _ _]  -> sh { rule = failure $ init l `MissingBefore` last l }
+    [Closed l _ _]   -> sh { rule = failure $ init l `MissingBefore` last l }
     _ -> error "can't happen" -- a single op in the list is returned.
   Num _ -> error "can't happen: Num is handled in a previous equation"
   Op _ -> error "can't happen: but TODO make a specifi data type for the input stack"
@@ -280,7 +261,7 @@ step table sh@(S (t:ts) [] oo ru) = case t of
 step _ sh@(S [] [] [[_]] _) = sh { rule = Done Success }
 
 -- This equation should never be reached; otherwise it is a bug.
-step _ sh = sh { rule = Done Unexpected }
+step _ sh = sh { rule = failure Unexpected }
 
 apply :: Table -> Tree -> [[Tree]] -> [[Tree]]
 apply table s@(Op y) (os:oss) =

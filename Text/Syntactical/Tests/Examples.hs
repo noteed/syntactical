@@ -1,7 +1,7 @@
 module Text.Syntactical.Tests.Examples where
 
 import Text.Syntactical
-import Text.Syntactical.Yard (Done(..))
+import Text.Syntactical.Yard (Result(..), Failure(..))
 
 table0 :: Table
 table0 = Table
@@ -183,7 +183,7 @@ testsTable0 = [
   , ("f ⟨⟩ 1", "⟨f ⟨⟩ 1⟩")
   ]
 
-testsTable0' :: [(String, Done)]
+testsTable0' :: [(String, Failure)]
 testsTable0' =
   [ ("true then 1 else 0", MissingBefore ["if"] "then")
   , ("if true 1 else 0", Incomplete ["if"]) -- MissingBefore ["then"] "else")

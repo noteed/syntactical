@@ -28,5 +28,5 @@ helper p (i,o) = testCase i $ case p i of
 
 helper' p (i,o) = testCase i $ case p i of
   Right o' -> assertFailure $ "unexpected successful parse: " ++ show o'
-  Left (S _ _ _ (Done o')) -> o @=? o'
+  Left o' -> o @=? o'
 
