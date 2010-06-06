@@ -117,6 +117,8 @@ testsTable0 = [
   , ("# a !", "⟨# ⟨! a⟩⟩")
   , ("a ! # b", "⟨⟨! a⟩ ⟨# b⟩⟩")
 
+  , ("1 + # b", "⟨+ 1 ⟨# b⟩⟩")
+
   , ("if true then 1 else 0", "⟨ifthenelse true 1 0⟩")
   , ("if 2 then 1 else 0", "⟨ifthenelse 2 1 0⟩")
   , ("if a b then 1 else 0", "⟨ifthenelse ⟨a b⟩ 1 0⟩")
@@ -159,6 +161,7 @@ testsTable0 = [
   , ("a _/ b /.", "⟨_//. a b⟩")
   , ("a _/ 1 + 2 /.", "⟨_//. a ⟨+ 1 2⟩⟩")
   , ("a _/ (b) /.", "⟨_//. a b⟩")
+  , ("a _/ 1 + 2 /. b", "⟨⟨_//. a ⟨+ 1 2⟩⟩ b⟩")
 --  , ("a + b _/ c /.", "⟨+ a ⟨_//. b c⟩⟩")
 --  , ("a + b * c _/ 1 + 2 /.", "⟨* ⟨+ a b⟩ ⟨_//. c ⟨+ 1 2⟩⟩") -- TODO prec postfix < prec *
 
@@ -176,12 +179,12 @@ testsTable0 = [
 testsTable0' :: [(String, Done)]
 testsTable0' =
   [ ("true then 1 else 0", MissingBefore ["if"] "then")
-  , ("if true 1 else 0", MissingBefore ["then"] "else")
+  , ("if true 1 else 0", Incomplete ["if"]) -- MissingBefore ["then"] "else")
   , ("true 1 else 0", MissingBefore ["if","then"] "else")
   , ("if true then 1", MissingAfter "else" ["if","then"])
   , ("[ a | b", MissingAfter "]" ["[","|"])
   , ("a | b ]", MissingBefore ["["] "|")
-  , ("[ a b ]", MissingBefore ["|"] "]")
+  , ("[ a b ]", Incomplete ["["]) -- MissingBefore ["|"] "]")
   , ("1 2", CantApply 1 2)
   , ("(1 2)", CantApply 1 2)
   , ("f (1 2)", CantApply 1 2)
@@ -193,9 +196,11 @@ testsTable0' =
   , ("[ | b ]", EmptyHole "[" "|")
   , ("[ a | ]", EmptyHole "|" "]")
   , ("true ? 1 : true then 1 else 0", MissingBefore ["if"] "then")
-  , ("true ? 1 : then 1 else 0", MissingBefore ["if"] "then")
+  , ("true ? 1 : then 1 else 0", EmptyHole ":" "then") -- MissingBefore ["if"] "then")
   , ("a _/ /.", EmptyHole "_/" "/.")
   , ("a _/ b", MissingAfter "/." ["_/"])
+  , ("(+ 2)", EmptyHole "(" "+")
+  , ("true : 1 + 2", MissingBefore ["?"] ":")
 -- TODO cases above with parenthesis or in bigger expression.
 -- TODO obviously those are not success, but I have to
 -- create and recognize the error cases.
@@ -208,6 +213,10 @@ testsTable0' =
   , ("[", Success)
   , ("]", Success)
   , ("_/ b /.", Success)
+  , ("(", )
+  , (")", )
+  , ("⟨", )
+  , ("⟩", )
 -}
   ]
 

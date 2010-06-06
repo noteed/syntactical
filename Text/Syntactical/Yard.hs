@@ -57,6 +57,7 @@ data Done =
   | CantMix Op Op -- error case: can't mix two operators
   | CantApply Int Int -- error case: can't apply number to number
   | EmptyHole String String -- error case: no sub-expression between ops/parts.
+  | Incomplete [String] -- error case: missing operator part(s) after the strings.
   | Unexpected -- unexpected state (can't happen, this is a bug)
   deriving (Eq, Show)
 
@@ -75,6 +76,7 @@ showDone d = case d of
   CantMix _ _ -> "Parse error: cannot mix operators"
   CantApply a b -> "Parse error: cannot apply " ++ show a ++ " to " ++ show b
   EmptyHole a b -> "Parse error: no sub-expression between " ++ a ++ " and " ++ b
+  Incomplete s -> "Parse error: missing operator parts after " ++ show s
   Unexpected -> "Parsing raised a bug"
 
 stackedOp :: Rule -> Bool
@@ -150,6 +152,25 @@ countInfix _ _ (Num _:_) =
 
 step :: Table -> Shunt -> Shunt
 
+step table (S tt st@(s@(Op y):ss) oo@(os:oss) ru) |
+  let o2 = head $ findOps y table
+      (_,r2) = parts o2
+      end = null r2
+  in end && isPostfix o2
+  =
+  S (o:tt) ss (os':oss') MatchedR
+  where ((o:os'):oss') = apply table s oo
+
+step table (S tt st@(s@(Op y):ss) oo@(os:oss) ru) |
+  let o2 = head $ findOps y table
+      (_,r2) = parts o2
+      end = null r2
+  in end && isClosed o2
+  = case head $ findOps y table of
+  Closed _ _ Discard -> S (o:tt) ss (os':oss) MatchedR where (o:os') = os
+  Closed _ _ DistfixAndDiscard -> S (o:tt) ss (os':oss) MatchedR where (o:os') = os
+  _ -> S (o:tt) ss (os':oss') MatchedR where ((o:os'):oss') = apply table s oo
+
 -- A number is on the input stack. It goes straight
 -- to the output unless we would end up trying to apply
 -- another (parsed just before) number. The stack can be empty.
@@ -202,109 +223,33 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
     (Postfix [] _ _, _) -> error "can't happen"
     (Closed [] _ _, _) -> error "can't happen"
 
-    _ | pt1 == Middle && not (o1 `continue` o2) && full o2 ->
-        S tt            ss                  (apply table s oo) FlushOp
---    _ | end && (isPostfix o1 || isClosed o1) && not (o1 `continue` o2) && full o2 ->
---        S tt            ss                  (apply table s oo) FlushOp
-
     (Closed [_] _ DistfixAndDiscard, Closed [_] _ SExpression) ->
       S ts            (Op [x]:st)       oo            StackL
     (Closed [_] _ Distfix, Closed [_] _ SExpression) ->
       S ts            (Op [x]:st)       oo            StackL
     (Closed [_] _ SExpression, _) ->
       S ts        (Op [x]:st)         ([]:oo)        StackL
-    (Closed _ [] Discard, Closed _ [_] Discard)
-      | l2++[r2] == l1 && stackedOp ru ->
-        S tt st oo (Done $ EmptyHole (last y) x)
-      | l2++[r2] == l1 ->
-       S (o:ts)           ss             (os':oss)             MatchedR
-       where (o:os') = os
-    (Closed _ [] DistfixAndDiscard, Closed _ [_] DistfixAndDiscard)
-      | l2++[r2] == l1 && stackedOp ru ->
-        S tt st oo (Done $ EmptyHole (last y) x)
-      | l2++[r2] == l1 ->
-       S (o:ts)           ss             (os':oss)             MatchedR
-       where (o:os') = os
     (Closed _ [] SExpression, Closed _ [_] SExpression)
-      | l2++[r2] == l1 && stackedOp ru ->
+      | l2++[r2] == l1 && stackedOp ru -> -- TODO build the sym ⟨⟩ (i.e. nil)
         S tt st oo (Done $ EmptyHole (last y) x)
       | l2++[r2] == l1 ->
         S ts                ss                  ((ap:h):oss')           MatchedR
         where (os':h:oss') = oo
               ap = Node (reverse os')
-    (Closed _ [] _, Closed _ (_:_) _)
-      | l2++[r2] == l1 && stackedOp ru ->
-        S tt st oo (Done $ EmptyHole (last y) x)
-      | l2++[r2] == l1 ->
-        S (o:ts)           ss       (os':oss')      MatchedR
-      | otherwise ->
-        S tt st oo (Done $ missingPrefix l1 l2)
-        where ((o:os'):oss') = apply table (Op l1) oo
-    (Closed _ _ _, Closed _ (_:_) _)
-      | l2++[r2] == l1 && stackedOp ru ->
-        S tt st oo (Done $ EmptyHole (last y) x)
-      | l2++[r2] == l1 ->
-        S ts      (Op l1:ss)            oo          ContinueOp
     (_, Closed [_] _ SExpression) ->
-      S ts                st              ((t:os):oss)           SExpr
-    (Infix [_] _ _ _, Closed _ _ _)
-      | ru == StackL -> error $ "missing sub-expression before " ++ x
-    _ | (isPrefix o1 || isClosed o1) && new ->
-        S ts      (Op [x]:st)         oo          StackL
-    (Prefix _ _ _, Infix _ _ _ _) ->
-      S tt st oo (Done $ init l1 `MissingBefore` last l1)
+      S ts st ((t:os):oss) SExpr
+
+    _ | not new && not (full o2) && not (o1 `continue` o2) ->
+       S tt st oo (Done $ Incomplete l2)
 
     _ | rightHole2 && leftHole1 && stackedOp ru ->
       S tt st oo (Done $ EmptyHole (last y) x)
---    _ | isInfix o
---    _ | o1 `continue` o2 && (isInfix o1 || isPrefix o1) ->
---      if stackedOp ru then S tt st oo (Done $ EmptyHole (last y) x)
---                      else S ts (Op l1:ss) oo ContinueOp
 
-    (Infix _ _ _ _, Infix _ (_:_) _ _)
-      | l2++[r2] == l1 && stackedOp ru ->
-        S tt st oo (Done $ EmptyHole (last y) x)
-      | l2++[r2] == l1 ->
-        S ts      (Op l1:ss)            oo          ContinueOp
-    (Infix [_] _ _ _, Infix _ [] _ _)
-      | stackedOp ru -> S tt st oo (Done $ EmptyHole (last y) x)
-      | otherwise -> flushHigher table o1 x ts st oo
-    (Infix _ _ _ _, Prefix _ _ _) ->
-      flushHigher table o1 x ts st oo
-    (Prefix _ _ _, Prefix _ (_:_) _)
-      | l2++[r2] == l1 && stackedOp ru ->
-        S tt st oo (Done $ EmptyHole (last y) x)
-      | l2++[r2] == l1 ->
-        S ts      (Op l1:ss)            oo          ContinueOp
-      | otherwise ->
-        S tt st oo (Done $ missingPrefix l1 l2)
-    (Postfix [_] [] p1, Prefix [_] [] p2)
-      -- TODO use flushHigher ?
-      | p1 > p2 ->
-        let [a] = os
-        in S (Node [Op [x],a]:ts) st ([]:oss) MakeInert
-      | p1 < p2 ->
-        let ([a]:oss') = apply table s oo
-        in S (Node [Op [x],a]:ts) ss ([]:oss') MakeInert
-      | otherwise -> S tt st oo (Done $ CantMix o1 o2)
-    (Postfix _ [] _, Postfix _ [_] _)
-      | l2++[r2] == l1 && stackedOp ru ->
-        S tt st oo (Done $ EmptyHole (last y) x)
-      | l2++[r2] == l1 ->
-        S (o:ts)           ss       (os':oss')      MatchedR
-      | otherwise ->
-        S tt st oo (Done $ missingPrefix l1 l2)
-        where ((o:os'):oss') = apply table (Op l1) oo
-    (_, Postfix _ _ _) ->
-        S ts      (Op [x]:st)         oo          StackOp
-    (_, Closed _ _ _) ->
-        S ts      (Op [x]:st)         oo          StackOp
-    (Postfix _ [] _, _) ->
-        S tt            ss                  (apply table s oo) FlushOp
-    (Closed _ [] _, _) ->
-        S tt            ss                  (apply table s oo) FlushOp
-    _ -> error $ "TODO: This is a bug: the patterns should be exhaustive but" ++
-           "(" ++ show t ++ ", " ++ show s ++ ") is not matched."
+    _ | o1 `continue` o2 -> S ts (Op l1:ss) oo ContinueOp
+
+    _ | not leftHole1 && new -> S ts (Op [x]:st) oo StackL
+
+    _ -> flushHigher table o1 x tt o2 st oo
 
 -- No more tokens on the input stack, just have to flush
 -- the remaining applicators and/or operators.
@@ -315,8 +260,8 @@ step table sh@(S [] (s:ss) oo _) = case s of
     -- The operator has all its parts.
     Infix _ [] _ _ -> S [] ss (apply table s oo) FlushOp
     Prefix _ [] _  -> S [] ss (apply table s oo) FlushOp
-    Postfix _ [] _ -> S [] ss (apply table s oo) FlushOp
-    Closed _ [] _  -> S [] ss (apply table s oo) FlushOp
+    --Postfix _ [] _ -> -- handled by the very first equation
+    --Closed _ [] _  -> -- handled by the very first equation
     -- The operator is not complete.
     Infix l r _ _  -> sh { rule = Done $ head r `MissingAfter` l }
     Prefix l r _   -> sh { rule = Done $ head r `MissingAfter` l }
@@ -358,15 +303,11 @@ applicator table (Sym x) = findOp x table == []
 applicator _ (Node _) = True
 applicator _ _ = False
 
-flushHigher :: Table -> Op -> String -> [Tree] -> [Tree] -> [[Tree]] -> Shunt
-flushHigher table o1 x ts (s@(Op y):ss) oss = case head $ findOps y table of
-  o2
-    | o1 `lower` o2 ->
-      flushHigher table o1 x ts ss (apply table s oss)
-    | otherwise ->
-      S ts (Op [x]:s:ss) oss FlushOp
-flushHigher _ _ x ts ss oss =
-      S ts (Op [x]:ss)   oss StackOp
+flushHigher table o1 x (t:ts) o2 (s:ss) oo
+  | o1 `lower` o2 =
+    S (t:ts) ss (apply table s oo) FlushOp
+  | otherwise =
+    S ts (Op [x]:s:ss) oo StackOp
 
 apply :: Table -> Tree -> [[Tree]] -> [[Tree]]
 apply table s@(Op y) (os:oss) =
@@ -386,8 +327,4 @@ apply _ s@(Sym _) (os:h:oss) =  (ap:h):oss
 apply _ s@(Node _) (os:h:oss) =  (ap:h):oss
   where ap = if null os then s else Node (s:reverse os)
 apply _ s oss = error $ "can't apply " ++ show s ++ " to " ++ show oss
-
-missingPrefix :: [String] -> [a] -> Done
-missingPrefix l1 l2 = init l1' `MissingBefore` last l1'
-  where l1' = drop (length l2) l1
 

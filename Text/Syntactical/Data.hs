@@ -79,6 +79,9 @@ isInfix' :: Op -> [String] -> Bool
 isInfix' (Infix xs _ _ _) ys = xs == ys
 isInfix' _ _ = False
 
+isSExpression (Closed _ _ SExpression) = True
+isSExpression _ = False
+
 continue (Infix l1 _ _ _) (Infix l2 (r2:_) _ _) = l2++[r2] == l1
 continue (Prefix l1 _ _) (Prefix l2 (r2:_) _) = l2++[r2] == l1
 continue (Postfix l1 _ _) (Postfix l2 (r2:_) _) = l2++[r2] == l1
@@ -102,6 +105,13 @@ lower (Infix [_] _ a1 p1) (Prefix _ [] p2)
     | a1 == LeftAssociative && p1 <= p2 = True
     | a1 == RightAssociative && p1 < p2 = True
     | a1 == NonAssociative && p1 <= p2 = True
+lower (Postfix [_] _ p1) (Prefix _ [] p2)
+    | p1 == p2 = error "cannot mix"
+    | p1 < p2 = True
+    | otherwise = False
+lower (Postfix _ [] _) _ = True
+lower (Closed _ [] _) _ = True
+lower o1 _ | part o1 == Middle = True
 lower _ _ = False
 
 findOp :: String -> Table -> [Op]
