@@ -152,8 +152,11 @@ countInfix _ _ (Num _:_) =
 
 step :: Table -> Shunt -> Shunt
 
+head' (x:_) _ = x
+head' [] y = error $ "Ouch my head! " ++ show y
+
 step table (S tt st@(s@(Op y):ss) oo@(os:oss) ru) |
-  let o2 = head $ findOps y table
+  let o2 = head' (findOps y table) y
       (_,r2) = parts o2
       end = null r2
   in end && isPostfix o2
@@ -230,10 +233,10 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
     (Closed [_] _ SExpression, _) ->
       S ts        (Op [x]:st)         ([]:oo)        StackL
     (Closed _ [] SExpression, Closed _ [_] SExpression)
-      | l2++[r2] == l1 && stackedOp ru -> -- TODO build the sym ⟨⟩ (i.e. nil)
-        S tt st oo (Done $ EmptyHole (last y) x)
+      | l2++[r2] == l1 && stackedOp ru ->
+        S (Sym "⟨⟩":ts) ss (h:oss') MakeInert
       | l2++[r2] == l1 ->
-        S ts                ss                  ((ap:h):oss')           MatchedR
+        S ts ss ((ap:h):oss') MatchedR
         where (os':h:oss') = oo
               ap = Node (reverse os')
     (_, Closed [_] _ SExpression) ->

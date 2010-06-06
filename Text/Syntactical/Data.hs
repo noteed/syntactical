@@ -100,15 +100,22 @@ lower (Infix [_] _ a1 p1) (Infix _ [] a2 p2)
     | a1 == LeftAssociative && p1 <= p2 = True
     | a1 == RightAssociative && p1 < p2 = True
     | a1 == NonAssociative && p1 <= p2 = True
+    | otherwise = False
 lower (Infix [_] _ a1 p1) (Prefix _ [] p2)
     | a1 == NonAssociative = error "cannot mix"
     | a1 == LeftAssociative && p1 <= p2 = True
     | a1 == RightAssociative && p1 < p2 = True
-    | a1 == NonAssociative && p1 <= p2 = True
+    | otherwise = False
 lower (Postfix [_] _ p1) (Prefix _ [] p2)
     | p1 == p2 = error "cannot mix"
     | p1 < p2 = True
     | otherwise = False
+lower (Postfix [_] _ p1) (Infix _ [] a2 p2)
+    | a2 == NonAssociative = error "cannot mix"
+    | a2 == LeftAssociative && p1 <= p2 = True
+    | a2 == RightAssociative && p1 < p2 = True
+    | otherwise = False
+lower (Prefix _ [] _) _ = True
 lower (Postfix _ [] _) _ = True
 lower (Closed _ [] _) _ = True
 lower o1 _ | part o1 == Middle = True
@@ -163,7 +170,7 @@ findOps' _ _ = error "findOps called on malformed operator table"
 break' :: (a -> Bool) -> [a] -> ([a], [a])
 break' p ls = case break p ls of
   (_, []) -> error "break': no element in l satisfying p"
-  (l, r) -> (l ++ [head r], tail r)
+  (l, r:rs) -> (l ++ [r], rs)
 
 -- Parts
 -- Examples:

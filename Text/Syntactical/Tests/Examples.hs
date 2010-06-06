@@ -118,6 +118,8 @@ testsTable0 = [
   , ("a ! # b", "⟨⟨! a⟩ ⟨# b⟩⟩")
 
   , ("1 + # b", "⟨+ 1 ⟨# b⟩⟩")
+  , ("# b 1", "⟨# ⟨b 1⟩⟩")
+  , ("b 1 !", "⟨! ⟨b 1⟩⟩")
 
   , ("if true then 1 else 0", "⟨ifthenelse true 1 0⟩")
   , ("if 2 then 1 else 0", "⟨ifthenelse 2 1 0⟩")
@@ -142,6 +144,9 @@ testsTable0 = [
   , ("f </ a />","⟨f ⟨<//> a⟩⟩")
   , ("f </ a + b />","⟨f ⟨<//> ⟨+ a b⟩⟩⟩")
 
+  , ("</ # 0 />","⟨<//> ⟨# 0⟩⟩")
+  , ("</ 1 + # 0 />","⟨<//> ⟨+ 1 ⟨# 0⟩⟩⟩")
+
   , ("[ a | b ]","⟨[|] a b⟩")
 
   , ("a = b ; c = d", "⟨; ⟨= a b⟩ ⟨= c d⟩⟩")
@@ -162,18 +167,21 @@ testsTable0 = [
   , ("a _/ 1 + 2 /.", "⟨_//. a ⟨+ 1 2⟩⟩")
   , ("a _/ (b) /.", "⟨_//. a b⟩")
   , ("a _/ 1 + 2 /. b", "⟨⟨_//. a ⟨+ 1 2⟩⟩ b⟩")
---  , ("a + b _/ c /.", "⟨+ a ⟨_//. b c⟩⟩")
---  , ("a + b * c _/ 1 + 2 /.", "⟨* ⟨+ a b⟩ ⟨_//. c ⟨+ 1 2⟩⟩") -- TODO prec postfix < prec *
+  , ("a + b _/ c /.", "⟨+ a ⟨_//. b c⟩⟩")
+  , ("a + b * c _/ 1 + 2 /.", "⟨+ a ⟨* b ⟨_//. c ⟨+ 1 2⟩⟩⟩⟩") -- TODO prec postfix < prec *
 
---  TODO , ("if true then if true then 1 else 0 else 2"
+  , ("if true then if true then 1 else 0 else 2",
+     "⟨ifthenelse true ⟨ifthenelse true 1 0⟩ 2⟩")
   , ("if true then 1 else # 0", "⟨ifthenelse true 1 ⟨# 0⟩⟩")
---  , ("if true then # 1 else 0", "⟨ifthenelse true ⟨# 1⟩ 0⟩")
+  , ("if true then # 1 else 0", "⟨ifthenelse true ⟨# 1⟩ 0⟩")
   , ("# if true then 1 else 0", "⟨# ⟨ifthenelse true 1 0⟩⟩")
   , ("[ a + b | c ]", "⟨[|] ⟨+ a b⟩ c⟩")
   , ("[ a | b + c ]", "⟨[|] a ⟨+ b c⟩⟩")
   , ("[ a + b | c * d ]", "⟨[|] ⟨+ a b⟩ ⟨* c d⟩⟩")
 
-  -- TODO , ("⟨⟩", "⟨⟩")
+  , ("⟨⟩", "⟨⟩")
+  , ("⟨⟩ a", "⟨⟨⟩ a⟩")
+  , ("f ⟨⟩ 1", "⟨f ⟨⟩ 1⟩")
   ]
 
 testsTable0' :: [(String, Done)]
