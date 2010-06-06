@@ -63,9 +63,33 @@ isInfix :: Op -> Bool
 isInfix (Infix _ _ _ _) = True
 isInfix _ = False
 
+isPrefix :: Op -> Bool
+isPrefix (Prefix _ _ _) = True
+isPrefix _ = False
+
+isPostfix :: Op -> Bool
+isPostfix (Postfix _ _ _) = True
+isPostfix _ = False
+
+isClosed :: Op -> Bool
+isClosed (Closed _ _ _) = True
+isClosed _ = False
+
 isInfix' :: Op -> [String] -> Bool
 isInfix' (Infix xs _ _ _) ys = xs == ys
 isInfix' _ _ = False
+
+continue (Infix l1 _ _ _) (Infix l2 (r2:_) _ _) = l2++[r2] == l1
+continue (Prefix l1 _ _) (Prefix l2 (r2:_) _) = l2++[r2] == l1
+continue (Postfix l1 _ _) (Postfix l2 (r2:_) _) = l2++[r2] == l1
+continue (Closed l1 _ _) (Closed l2 (r2:_) _) = l2++[r2] == l1
+continue _ _ = False
+
+full (Infix _ [] _ _) = True
+full (Prefix _ [] _) = True
+full (Postfix _ [] _) = True
+full (Closed _ [] _) = True
+full _ = False
 
 lower :: Op -> Op -> Bool
 lower (Infix [_] _ a1 p1) (Infix _ [] a2 p2)
@@ -130,4 +154,80 @@ break' :: (a -> Bool) -> [a] -> ([a], [a])
 break' p ls = case break p ls of
   (_, []) -> error "break': no element in l satisfying p"
   (l, r) -> (l ++ [head r], tail r)
+
+-- Parts
+-- Examples:
+-- if_then_else_ : Prefix
+-- \    \    \
+--  \    \    - Last True   - last part with a hole on its right,
+--   \    \                   the hole on its left is implied.
+--    \    ---- Middle      - middle part, the two holes are implied.
+--     -------- First False - first part with no hole on its left,
+--                            the hole on its right is implied.
+--
+-- _+_ : Infix
+--  \
+--   - Lone BothOpen  - first and last part, with two holes.
+--
+-- _! : Postfix
+--   \
+--    - Lone LeftOpen - first and last part, with a left hole.
+
+data Part = First Bool
+          | Last Bool
+          | Lone Opening
+          | Middle
+  deriving (Show, Eq)
+
+data Opening = LeftOpen
+             | RightOpen
+             | BothOpen
+  deriving (Show, Eq)
+
+leftHole :: Part -> Bool
+leftHole (First True) = True
+leftHole (First _) = False
+leftHole (Last _) = True
+leftHole (Lone RightOpen) = False
+leftHole (Lone _) = True
+leftHole Middle = True
+
+rightHole :: Part -> Bool
+rightHole (First _) = True
+rightHole (Last True) = True
+rightHole (Last _) = False
+rightHole (Lone LeftOpen) = False
+rightHole (Lone _) = True
+rightHole Middle = True
+
+part :: Op -> Part
+
+part (Infix [] _ _ _) = error "part called on malformed infix operator"
+part (Infix [_] [] _ _) = Lone BothOpen
+part (Infix [_] _ _ _) = First True
+part (Infix _ [] _ _) = Last True
+part (Infix _ _ _ _) = Middle
+
+part (Prefix [] _ _) = error "part called on malformed prefix operator"
+part (Prefix [_] [] _) = Lone RightOpen
+part (Prefix [_] _ _) = First False
+part (Prefix _ [] _) = Last True
+part (Prefix _ _ _) = Middle
+
+part (Postfix [] _ _) = error "part called on malformed postfix operator"
+part (Postfix [_] [] _) = Lone LeftOpen
+part (Postfix [_] _ _) = First True
+part (Postfix _ [] _) = Last False
+part (Postfix _ _ _) = Middle
+
+part (Closed [] _ _) = error "part called on malformed closed operator"
+part (Closed [_] [] _) = error "part called on malformed closed operator"
+part (Closed [_] _ _) = First False
+part (Closed _ [] _) = Last False
+part (Closed _ _ _) = Middle
+
+parts (Infix l r _ _) = (l,r)
+parts (Prefix l r _) = (l,r)
+parts (Postfix l r _) = (l,r)
+parts (Closed l r _) = (l,r)
 

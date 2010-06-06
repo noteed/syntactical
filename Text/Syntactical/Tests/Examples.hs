@@ -159,15 +159,16 @@ testsTable0 = [
   , ("a _/ b /.", "⟨_//. a b⟩")
   , ("a _/ 1 + 2 /.", "⟨_//. a ⟨+ 1 2⟩⟩")
   , ("a _/ (b) /.", "⟨_//. a b⟩")
-  , ("a + b _/ c /.", "⟨+ a ⟨_//. b c⟩⟩")
-  , ("a + b * c _/ 1 + 2 /.", "⟨* ⟨+ a b⟩ ⟨_//. c ⟨+ 1 2⟩⟩") -- TODO prec postfix < prec *
+--  , ("a + b _/ c /.", "⟨+ a ⟨_//. b c⟩⟩")
+--  , ("a + b * c _/ 1 + 2 /.", "⟨* ⟨+ a b⟩ ⟨_//. c ⟨+ 1 2⟩⟩") -- TODO prec postfix < prec *
 
 --  TODO , ("if true then if true then 1 else 0 else 2"
   , ("if true then 1 else # 0", "⟨ifthenelse true 1 ⟨# 0⟩⟩")
-  , ("if true then # 1 else 0", "⟨ifthenelse true ⟨# 1⟩ 0⟩")
+--  , ("if true then # 1 else 0", "⟨ifthenelse true ⟨# 1⟩ 0⟩")
   , ("# if true then 1 else 0", "⟨# ⟨ifthenelse true 1 0⟩⟩")
   , ("[ a + b | c ]", "⟨[|] ⟨+ a b⟩ c⟩")
   , ("[ a | b + c ]", "⟨[|] a ⟨+ b c⟩⟩")
+  , ("[ a + b | c * d ]", "⟨[|] ⟨+ a b⟩ ⟨* c d⟩⟩")
 
   -- TODO , ("⟨⟩", "⟨⟩")
   ]
@@ -180,7 +181,6 @@ testsTable0' =
   , ("if true then 1", MissingAfter "else" ["if","then"])
   , ("[ a | b", MissingAfter "]" ["[","|"])
   , ("a | b ]", MissingBefore ["["] "|")
-  , ("[ a b ]", MissingBefore ["|"] "]")
   , ("[ a b ]", MissingBefore ["|"] "]")
   , ("1 2", CantApply 1 2)
   , ("(1 2)", CantApply 1 2)
