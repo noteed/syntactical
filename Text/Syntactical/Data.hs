@@ -40,6 +40,34 @@ type Precedence = Int
 
 data Table = Table [Op]
 
+infx :: String -> [String] -> Associativity -> Op
+infx f rest a = Infix [] (f:rest) a 0
+
+prefx :: String -> [String] -> Op
+prefx f rest = Prefix [] (f:rest) 0
+
+postfx :: String -> [String] -> Op
+postfx f rest = Postfix [] (f:rest) 0
+
+closed :: String -> [String] -> String -> Kind -> Op
+closed f rest l k = Closed [] (f:rest++[l]) k
+
+setPrecedence :: Precedence -> Op -> Op
+setPrecedence p (Infix l r a _) = Infix l r a p
+setPrecedence p (Prefix l r _) = Prefix l r p
+setPrecedence p (Postfix l r _) = Postfix l r p
+setPrecedence _ c = c
+
+-- buildTable constructs an operator table that can be
+-- used with the shunt function. Operators are given
+-- in decreasing precedence order.
+-- TODO see if Parsec's buildExpressionParser uses a
+-- incresing or decreasing list.
+buildTable :: [[Op]] -> Table
+buildTable ls = Table . concat $ zipWith f ls [n, n - 1 .. 0]
+  where n = length ls
+        f l p = map (setPrecedence p) l
+
 instance Show Tree where
   show = display
 

@@ -1,35 +1,45 @@
 module Text.Syntactical.Tests.Examples where
 
 import Text.Syntactical
-import Text.Syntactical.Yard (Result(..), Failure(..))
 
 table0 :: Table
-table0 = Table
- [ Closed [] ["(",")"] DistfixAndDiscard
- , Closed [] ["⟨","⟩"] SExpression
- , Infix [] ["<<"] LeftAssociative 5
- , Infix [] [">>"] LeftAssociative 5
- , Infix [] ["+"] LeftAssociative 6
- , Infix [] ["-"] LeftAssociative 6
- , Infix [] ["*"] LeftAssociative 7
- , Infix [] ["/"] LeftAssociative 7
- , Infix [] ["?",":"] RightAssociative 5
- , Infix [] ["?'", ":'"] RightAssociative 9
- , Prefix [] ["#"] 8
- , Postfix [] ["°"] 7
- , Postfix [] ["%"] 8
- , Postfix [] ["!"] 9
- , Postfix [] ["_/","/."] 9
- , Prefix [] ["if","then","else"] 3
- , Closed [] ["</","/>"] Keep
- , Closed [] ["[","|","]"] Keep
- , Infix [] [","] RightAssociative 2
- , Closed [] ["{","}"] Keep
- , Infix [] [";"] RightAssociative (-2)
- , Infix [] ["="] NonAssociative (-1)
- , Prefix [] ["let","in"] 0
- , Infix [] ["where"] RightAssociative 0
- , Prefix [] ["case","of"] 0
+table0 = buildTable
+ [ [ closed "(" [] ")" DistfixAndDiscard
+   , closed "⟨" [] "⟩" SExpression
+   , closed "</" []"/>" Keep
+   , closed "[" ["|"] "]" Keep
+   , closed "{" [] "}" Keep
+   ]
+ , [ infx "?'" [":'"] RightAssociative
+   , postfx "!" []
+   , postfx "_/" ["/."]
+   ]
+ , [ postfx "%" []
+   , prefx "#" []
+   ]
+ , [ postfx "°" []
+   , infx "*" [] LeftAssociative
+   , infx "/" [] LeftAssociative
+   ]
+ , [ infx "+" [] LeftAssociative
+   , infx "-" [] LeftAssociative
+   ]
+ , [ infx "<<" [] LeftAssociative
+   , infx ">>" [] LeftAssociative
+   , infx "?" [":"] RightAssociative
+   ]
+ , [ prefx "if" ["then","else"]
+   ]
+ , [ infx "," [] RightAssociative
+   ]
+ , [ prefx "let" ["in"]
+   , infx "where" [] RightAssociative
+   , prefx "case" ["of"]
+   ]
+ , [ infx "=" [] NonAssociative
+   ]
+ , [ infx ";" [] RightAssociative
+   ]
  ]
 
 -- [(input, expected output)]
