@@ -13,10 +13,28 @@ data Tree = Node [Tree]
            | Op [String] -- on the stack, TODO turn into Sym on the output
   deriving Eq
 
-data Op = Infix [String] [String] Associativity Precedence
-        | Prefix [String] [String] Precedence
-        | Postfix [String] [String] Precedence
-        | Closed [String] [String] Kind
+data Op =
+    Infix
+  { opL :: [String]
+  , opR :: [String]
+  , opA :: Associativity
+  , opP :: Precedence
+  }
+  | Prefix
+  { opL :: [String]
+  , opR :: [String]
+  , opP :: Precedence
+  }
+  | Postfix
+  { opL :: [String]
+  , opR :: [String]
+  , opP :: Precedence
+  }
+  | Closed
+  { opL :: [String]
+  , opR :: [String]
+  , opK :: Kind
+  }
   deriving (Eq, Show)
 
 -- The Kind is used to give various behaviours when dealing
@@ -157,46 +175,27 @@ findOp op (Table t) = findOp' op t
 
 findOp' :: String -> [Op] -> [Op]
 findOp' _ [] = []
-findOp' op (Infix [] pts a p:xs)
-  | op `elem` pts =
-     let (l,r) = break' (== op) pts
-     in Infix l r a p : findOp' op xs
-  | otherwise = findOp' op xs
-findOp' op (Prefix [] pts p:xs)
-  | op `elem` pts =
-     let (l,r) = break' (== op) pts
-     in Prefix l r p : findOp' op xs
-  | otherwise = findOp' op xs
-findOp' op (Postfix [] pts p:xs)
-  | op `elem` pts =
-     let (l,r) = break' (== op) pts
-     in Postfix l r p : findOp' op xs
-  | otherwise = findOp' op xs
-findOp' op (Closed [] pts k:xs)
-  | op `elem` pts =
-     let (l,r) = break' (== op) pts
-     in Closed l r k : findOp' op xs
-  | otherwise = findOp' op xs
-findOp' _ _ = error "findOps called on malformed operator table"
+findOp' op (o:os) =
+  case parts o of
+   ([], pts) ->
+     if op `elem` pts
+     then let (l,r) = break' (== op) pts
+          in o { opL = l , opR = r } : findOp' op os
+     else findOp' op os
+   _ -> error "findOp called on malformed operator table"
 
 findOps :: [String] -> Table -> [Op]
 findOps ops (Table t) = findOps' ops t
 
 findOps' :: [String] -> [Op] -> [Op]
 findOps' _ [] = []
-findOps' ops (Infix [] pts a p:xs)
-  | ops `isPrefixOf` pts = Infix ops (drop (length ops) pts) a p : findOps' ops xs
-  | otherwise = findOps' ops xs
-findOps' ops (Prefix [] pts p:xs)
-  | ops `isPrefixOf` pts = Prefix ops (drop (length ops) pts) p : findOps' ops xs
-  | otherwise = findOps' ops xs
-findOps' ops (Postfix [] pts p:xs)
-  | ops `isPrefixOf` pts = Postfix ops (drop (length ops) pts) p : findOps' ops xs
-  | otherwise = findOps' ops xs
-findOps' ops (Closed [] pts k:xs)
-  | ops `isPrefixOf` pts = Closed ops (drop (length ops) pts) k : findOps' ops xs
-  | otherwise = findOps' ops xs
-findOps' _ _ = error "findOps called on malformed operator table"
+findOps' ops (o:os) =
+  case parts o of
+   ([], pts) ->
+     if ops `isPrefixOf` pts
+     then o { opL = ops , opR = drop (length ops) pts } : findOps' ops os
+     else findOps' ops os
+   _ -> error "findOps called on malformed operator table"
 
 break' :: (a -> Bool) -> [a] -> ([a], [a])
 break' p ls = case break p ls of
@@ -208,6 +207,17 @@ applicator table (Sym x) = findOp x table == []
 applicator _ (Node _) = True
 applicator _ _ = False
 
+-- findOperators makes it possible to use a symbol
+-- as part of multiple operators. For now the rule
+-- is simple: two or more operators can have the
+-- same prefix if they differ by at least one symbol
+-- after the prefix. Also the first part of the operators
+-- should have identical leftHole value.
+-- Examples:
+-- , and [_,_] are ambiguous
+-- < and <_> are ambiguous
+-- [_] and [_,_] are permitted
+-- _::_; and _=_; are permitted
 findOperators :: Table -> String -> [String] -> (Op, Op)
 findOperators table x y =
  (head $ findOp x table, head $ findOps y table)
