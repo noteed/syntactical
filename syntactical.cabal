@@ -11,7 +11,7 @@ Maintainer:          Vo Minh Thu <noteed@gmail.com>
 Stability:           Experimental
 Category:            Parsing
 Build-type:          Simple
-Extra-source-files:  README, tests/*.hs
+Extra-source-files:  README.md, tests/*.hs
 Cabal-version:       >=1.6
 
 Source-repository head
