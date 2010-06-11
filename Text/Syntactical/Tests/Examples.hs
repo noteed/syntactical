@@ -40,6 +40,9 @@ table0 = buildTable
    ]
  , [ infx ";" [] RightAssociative
    ]
+ , [ infx "::" [";;"] RightAssociative
+   , infx "==" [";;"] RightAssociative
+   ]
  ]
 
 -- [(input, expected output)]

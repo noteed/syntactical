@@ -37,6 +37,13 @@ data Op =
   }
   deriving (Eq, Show)
 
+-- Alternative data type to represent operators.
+-- The Opening value for an Infix operator should have an Associativity field.
+-- The Keep constructor (in the Kind type) should be Keep [String], i.e.
+-- allow internal parts.
+data OpX = Op1 String [String] Opening Precedence
+         | Op2 String Kind String
+
 -- The Kind is used to give various behaviours when dealing
 -- with Closed operators.
 -- Discard means the Closed operator will be removed from the
@@ -164,10 +171,9 @@ lower (Postfix [_] _ p1) (Infix _ [] a2 p2)
     | a2 == LeftAssociative && p1 <= p2 = True
     | a2 == RightAssociative && p1 < p2 = True
     | otherwise = False
-lower (Prefix _ [] _) _ = True
-lower (Postfix _ [] _) _ = True
-lower (Closed _ [] _) _ = True
-lower o1 _ | part o1 == Middle = True
+lower o1 _ | part o1 == Middle
+           ||part o1 == Last True
+           || part o1 == Last False = True
 lower _ _ = False
 
 findOp :: String -> Table -> [Op]
@@ -218,9 +224,26 @@ applicator _ _ = False
 -- < and <_> are ambiguous
 -- [_] and [_,_] are permitted
 -- _::_; and _=_; are permitted
+-- For now, the fixity of the possible operators should
+-- be the same although it is possible to, e.g., allow
+-- /_/ and /_\_
 findOperators :: Table -> String -> [String] -> (Op, Op)
 findOperators table x y =
- (head $ findOp x table, head $ findOps y table)
+  if nonAmbiguous xs && nonAmbiguous ys
+  then if null xy then (head xs, head ys) else head xy
+  else if nonAmbiguous xs then error $ "ambiguous operators " ++ show ys
+                     else error $ "ambiguous operators " ++ show xs
+  where xs = findOp x table
+        ys = findOps y table
+        xy = [(a,b) | a <- xs, b <- ys, a `continue` b]
+
+-- TODO check precedence/associativity
+nonAmbiguous [] = True
+nonAmbiguous (o:os) = case o of
+  Infix _ _ _ _ -> all isInfix os
+  Prefix _ _ _ -> all isPrefix os
+  Postfix _ _ _ -> all isPostfix os
+  Closed _ _ _ -> all isClosed os
 
 -- Parts
 -- Examples:
