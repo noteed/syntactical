@@ -238,6 +238,7 @@ findOperators table x y =
         xy = [(a,b) | a <- xs, b <- ys, a `continue` b]
 
 -- TODO check precedence/associativity
+nonAmbiguous :: [Op] -> Bool
 nonAmbiguous [] = True
 nonAmbiguous (o:os) = case o of
   Infix _ _ _ _ -> all isInfix os
