@@ -38,11 +38,46 @@ data Op =
   deriving (Eq, Show)
 
 -- Alternative data type to represent operators.
--- The Opening value for an Infix operator should have an Associativity field.
--- The Keep constructor (in the Kind type) should be Keep [String], i.e.
--- allow internal parts.
-data OpX = Op1 String [String] Opening Precedence
-         | Op2 String Kind String
+-- The Kind specifies how the hole sould be parsed:
+-- either as an s-expression (missing the brackets) or as
+-- a distfix expression. Maybe it could be extended to
+-- support user-defined parsers, ot at least a specific
+-- operator table.
+-- The boolean is to specify if the operator should show up
+-- in the result or be discarded.
+-- e.g. ⟨1 2⟩ instead of ⟨+ 1 2⟩ when the + is retained.
+-- e.g. 1 instead of ⟨! 1⟩ when the ! is retained.
+-- e.g. ⟨1⟩ instead of ⟨! 1⟩ if the hole is also parsed as an s-expr.
+data OpX = Op1 Bool String [(Kind,String)] Opening Associativity Precedence
+         | Op2 Bool String Kind String [(Kind,String)]
+
+-- Internal representation. This representation can have non-sensical
+-- values. The code will not create them and the user will not be able
+-- to create them either.
+-- (left hole?, either, associativity, precedence, possible preceding
+-- part, parts, possible following part)
+-- where the either value is left kind when the operator isn't complete (and the
+-- kind gives information about the rigth hole) or is right bool when the operator
+-- is complete (and the (bool,bool) specifies if it is kept and if there is a hole on the right).
+-- Left hole is always True when there is more than one part.
+data InternalOp =
+  InternalOp Bool (Either Kind (Bool,Bool)) Associativity Precedence [String] String [String]
+
+buildInternalOp :: Op -> InternalOp
+buildInternalOp (Infix l r a p) = InternalOp
+  True (if null r then Right (True,True) else Left Distfix) a p [last $ init l] (last l) [head r]
+buildInternalOp (Prefix l r p) = InternalOp
+  False (if null r then Right (True,True) else Left Distfix) LeftAssociative p [last $ init l] (last l) [head r]
+buildInternalOp (Postfix l r p) = InternalOp
+  True (if null r then Right (True,False) else Left Distfix) RightAssociative p [last $ init l] (last l) [head r]
+buildInternalOp (Closed l r k) = InternalOp
+  False (if null r then Right (a,False) else Left b) NonAssociative 0 [last $ init l] (last l) [head r]
+  where (a,b) = case k of
+          Discard -> (False,Distfix)
+          Keep -> (True,Distfix)
+          SExpression -> (False,SExpression)
+          Distfix -> (True,Distfix)
+          DistfixAndDiscard -> (False,Distfix)
 
 -- The Kind is used to give various behaviours when dealing
 -- with Closed operators.
@@ -136,20 +171,6 @@ isSExpression :: Op -> Bool
 isSExpression (Closed _ _ SExpression) = True
 isSExpression _ = False
 
-continue :: Op -> Op -> Bool
-continue (Infix l1 _ _ _) (Infix l2 (r2:_) _ _) = l2++[r2] == l1
-continue (Prefix l1 _ _) (Prefix l2 (r2:_) _) = l2++[r2] == l1
-continue (Postfix l1 _ _) (Postfix l2 (r2:_) _) = l2++[r2] == l1
-continue (Closed l1 _ _) (Closed l2 (r2:_) _) = l2++[r2] == l1
-continue _ _ = False
-
-full :: Op -> Bool
-full (Infix _ [] _ _) = True
-full (Prefix _ [] _) = True
-full (Postfix _ [] _) = True
-full (Closed _ [] _) = True
-full _ = False
-
 lower :: Op -> Op -> Bool
 lower (Infix [_] _ a1 p1) (Infix _ [] a2 p2)
     | a1 == NonAssociative && a2 == NonAssociative = error "cannot mix"
@@ -171,9 +192,8 @@ lower (Postfix [_] _ p1) (Infix _ [] a2 p2)
     | a2 == LeftAssociative && p1 <= p2 = True
     | a2 == RightAssociative && p1 < p2 = True
     | otherwise = False
-lower o1 _ | part o1 == Middle
-           ||part o1 == Last True
-           || part o1 == Last False = True
+lower o1 _ | isMiddle (part o1)
+           || isLast (part o1) && not (isLone $ part o1)= True
 lower _ _ = False
 
 findOp :: String -> Table -> [Op]
@@ -235,7 +255,7 @@ findOperators table x y =
                      else error $ "ambiguous operators " ++ show xs
   where xs = findOp x table
         ys = findOps y table
-        xy = [(a,b) | a <- xs, b <- ys, a `continue` b]
+        xy = [(a,b) | a <- xs, b <- ys, x `continue` (part b)]
 
 -- TODO check precedence/associativity
 nonAmbiguous :: [Op] -> Bool
@@ -264,11 +284,30 @@ nonAmbiguous (o:os) = case o of
 --   \
 --    - Lone LeftOpen - first and last part, with a left hole.
 
-data Part = First Bool
-          | Last Bool
+data Part = First Bool [String] -- possible successor parts, non-empty
+          | Last Bool [String] -- possible predecessor parts, non-empty
           | Lone Opening
-          | Middle
+          | Middle [String] [String] -- possible predecessor and successor parts, non-empty
   deriving (Show, Eq)
+
+isLone (Lone _) = True
+isLone _ = False
+
+isFirst (Lone _) = True
+isFirst (First _ _) = True
+isFirst _ = False
+
+isLast (Lone _) = True
+isLast (Last _ _) = True
+isLast _ = False
+
+isMiddle (Middle _ _) = True
+isMiddle _ = False
+
+previous (First _ _) = []
+previous (Last _ l) = l
+previous (Lone _) = []
+previous (Middle l _) = l
 
 data Opening = LeftOpen
              | RightOpen
@@ -276,46 +315,54 @@ data Opening = LeftOpen
   deriving (Show, Eq)
 
 leftHole :: Part -> Bool
-leftHole (First True) = True
-leftHole (First _) = False
-leftHole (Last _) = True
+leftHole (First True _) = True
+leftHole (First _ _) = False
+leftHole (Last _ _) = True
 leftHole (Lone RightOpen) = False
 leftHole (Lone _) = True
-leftHole Middle = True
+leftHole (Middle _ _) = True
 
 rightHole :: Part -> Bool
-rightHole (First _) = True
-rightHole (Last True) = True
-rightHole (Last _) = False
+rightHole (First _ _) = True
+rightHole (Last True _) = True
+rightHole (Last _ _) = False
 rightHole (Lone LeftOpen) = False
 rightHole (Lone _) = True
-rightHole Middle = True
+rightHole (Middle _ _) = True
+
+nextPart (First _ r) = r
+nextPart (Last _ _ ) = []
+nextPart (Lone _) = []
+nextPart (Middle _ r) = r
+
+continue :: String -> Part -> Bool
+continue t p = t `elem` nextPart p
 
 part :: Op -> Part
 
 part (Infix [] _ _ _) = error "part called on malformed infix operator"
 part (Infix [_] [] _ _) = Lone BothOpen
-part (Infix [_] _ _ _) = First True
-part (Infix _ [] _ _) = Last True
-part (Infix _ _ _ _) = Middle
+part (Infix [_] (r:_) _ _) = First True [r]
+part (Infix l [] _ _) = Last True [last $ init l]
+part (Infix l (r:_) _ _) = Middle [last $ init l] [r]
 
 part (Prefix [] _ _) = error "part called on malformed prefix operator"
 part (Prefix [_] [] _) = Lone RightOpen
-part (Prefix [_] _ _) = First False
-part (Prefix _ [] _) = Last True
-part (Prefix _ _ _) = Middle
+part (Prefix [_] (r:_) _) = First False [r]
+part (Prefix l [] _) = Last True [last $ init l]
+part (Prefix l (r:_) _) = Middle [last $ init l] [r]
 
 part (Postfix [] _ _) = error "part called on malformed postfix operator"
 part (Postfix [_] [] _) = Lone LeftOpen
-part (Postfix [_] _ _) = First True
-part (Postfix _ [] _) = Last False
-part (Postfix _ _ _) = Middle
+part (Postfix [_] (r:_) _) = First True [r]
+part (Postfix l [] _) = Last False [last $ init l]
+part (Postfix l (r:_) _) = Middle [last $ init l] [r]
 
 part (Closed [] _ _) = error "part called on malformed closed operator"
 part (Closed [_] [] _) = error "part called on malformed closed operator"
-part (Closed [_] _ _) = First False
-part (Closed _ [] _) = Last False
-part (Closed _ _ _) = Middle
+part (Closed [_] (r:_) _) = First False [r]
+part (Closed l [] _) = Last False [last $ init l]
+part (Closed l (r:_) _) = Middle [last $ init l] [r]
 
 parts :: Op -> ([String], [String])
 parts (Infix l r _ _) = (l,r)

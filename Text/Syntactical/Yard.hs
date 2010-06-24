@@ -175,16 +175,8 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
       pt2 = part o2
       leftHole1 = leftHole pt1
       rightHole2 = rightHole pt2
-      (l1,_) = parts o1
-      (l2,r2:_) = parts o2
-      new = length l1 == 1
   in
   case (o1, o2) of
-    (Infix [] _ _ _, _) -> error "can't happen"
-    (Prefix [] _ _, _) -> error "can't happen"
-    (Postfix [] _ _, _) -> error "can't happen"
-    (Closed [] _ _, _) -> error "can't happen"
-
     (Closed [_] _ DistfixAndDiscard, Closed [_] _ SExpression) ->
       S ts (Op [x]:st) oo StackL
     (Closed [_] _ Distfix, Closed [_] _ SExpression) ->
@@ -192,24 +184,24 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
     (Closed [_] _ SExpression, _) ->
       S ts (Op [x]:st) ([]:oo) StackL
     (Closed _ [] SExpression, Closed _ [_] SExpression)
-      | l2++[r2] == l1 && stackedOp ru ->
+      | x `continue` pt2 && stackedOp ru ->
         S (Sym "⟨⟩":ts) ss (h:oss') MakeInert
-      | l2++[r2] == l1 ->
+      | x `continue` pt2 ->
         S ts ss ((ap:h):oss') MatchedR
         where (os':h:oss') = oo
               ap = Node (reverse os')
     (_, Closed [_] _ SExpression) ->
       S ts st ((t:os):oss) SExpr
 
-    _ | not new && not (full o2) && not (o1 `continue` o2) ->
-       S tt st oo (failure $ Incomplete l2)
+    _ | not (isFirst pt1) && not (isLast  pt2) && not (x `continue` pt2) ->
+       S tt st oo (failure $ Incomplete y)
 
     _ | rightHole2 && leftHole1 && stackedOp ru ->
       S tt st oo (failure $ EmptyHole (last y) x)
 
-    _ | o1 `continue` o2 -> S ts (Op l1:ss) oo ContinueOp
+    _ | x `continue` pt2 -> S ts (Op (y++[x]):ss) oo ContinueOp
 
-    _ | not leftHole1 && new -> S ts (Op [x]:st) oo StackL
+    _ | not leftHole1 && isFirst pt1 -> S ts (Op [x]:st) oo StackL
 
     _ | o1 `lower` o2 -> S tt ss (apply table s oo) FlushOp
 
