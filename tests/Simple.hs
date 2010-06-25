@@ -205,9 +205,9 @@ testsTable0' :: [(String, Failure)]
 testsTable0' =
   [ ("true then 1 else 0", MissingBefore ["if"] "then")
   , ("if true 1 else 0", Incomplete ["if"]) -- MissingBefore ["then"] "else")
-  , ("true 1 else 0", MissingBefore ["if","then"] "else")
-  , ("if true then 1", MissingAfter "else" ["if","then"])
-  , ("[ a | b", MissingAfter "]" ["[","|"])
+  , ("true 1 else 0", MissingBefore ["then"] "else")
+  , ("if true then 1", MissingAfter ["else"] ["if","then"])
+  , ("[ a | b", MissingAfter ["]"] ["[","|"])
   , ("a | b ]", MissingBefore ["["] "|")
   , ("[ a b ]", Incomplete ["["]) -- MissingBefore ["|"] "]")
   , ("1 2", CantApply 1 2)
@@ -223,7 +223,7 @@ testsTable0' =
   , ("true ? 1 : true then 1 else 0", MissingBefore ["if"] "then")
   , ("true ? 1 : then 1 else 0", EmptyHole ":" "then") -- MissingBefore ["if"] "then")
   , ("a _/ /.", EmptyHole "_/" "/.")
-  , ("a _/ b", MissingAfter "/." ["_/"])
+  , ("a _/ b", MissingAfter ["/."] ["_/"])
   , ("(+ 2)", EmptyHole "(" "+")
   , ("true : 1 + 2", MissingBefore ["?"] ":")
 -- TODO cases above with parenthesis or in bigger expression.
