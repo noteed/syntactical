@@ -284,30 +284,30 @@ nonAmbiguous (o:os) = case o of
 --   \
 --    - Lone LeftOpen - first and last part, with a left hole.
 
-data Part = First Bool [String] -- possible successor parts, non-empty
-          | Last Bool [String] -- possible predecessor parts, non-empty
-          | Lone Opening
-          | Middle [String] [String] -- possible predecessor and successor parts, non-empty
+data Part = First Bool [String] Kind -- possible successor parts, non-empty
+          | Last Bool [String] Bool -- possible predecessor parts, non-empty
+          | Lone Opening Bool
+          | Middle [String] [String] Kind -- possible predecessor and successor parts, non-empty
   deriving (Show, Eq)
 
-isLone (Lone _) = True
+isLone (Lone _ _) = True
 isLone _ = False
 
-isFirst (Lone _) = True
-isFirst (First _ _) = True
+isFirst (Lone _ _) = True
+isFirst (First _ _ _) = True
 isFirst _ = False
 
-isLast (Lone _) = True
-isLast (Last _ _) = True
+isLast (Lone _ _) = True
+isLast (Last _ _ _) = True
 isLast _ = False
 
-isMiddle (Middle _ _) = True
+isMiddle (Middle _ _ _) = True
 isMiddle _ = False
 
-previous (First _ _) = []
-previous (Last _ l) = l
-previous (Lone _) = []
-previous (Middle l _) = l
+previous (First _ _ _) = []
+previous (Last _ l _) = l
+previous (Lone _ _) = []
+previous (Middle l _ _) = l
 
 data Opening = LeftOpen
              | RightOpen
@@ -315,25 +315,31 @@ data Opening = LeftOpen
   deriving (Show, Eq)
 
 leftHole :: Part -> Bool
-leftHole (First True _) = True
-leftHole (First _ _) = False
-leftHole (Last _ _) = True
-leftHole (Lone RightOpen) = False
-leftHole (Lone _) = True
-leftHole (Middle _ _) = True
+leftHole (First True _ _) = True
+leftHole (First _ _ _) = False
+leftHole (Last _ _ _) = True
+leftHole (Lone RightOpen _) = False
+leftHole (Lone _ _) = True
+leftHole (Middle _ _ _) = True
 
 rightHole :: Part -> Bool
-rightHole (First _ _) = True
-rightHole (Last True _) = True
-rightHole (Last _ _) = False
-rightHole (Lone LeftOpen) = False
-rightHole (Lone _) = True
-rightHole (Middle _ _) = True
+rightHole (First _ _ _) = True
+rightHole (Last True _ _) = True
+rightHole (Last _ _ _) = False
+rightHole (Lone LeftOpen _) = False
+rightHole (Lone _ _) = True
+rightHole (Middle _ _ _) = True
 
-nextPart (First _ r) = r
-nextPart (Last _ _ ) = []
-nextPart (Lone _) = []
-nextPart (Middle _ r) = r
+rightHoleKind :: Part -> Maybe Kind
+rightHoleKind (First _ _ k) = Just k
+rightHoleKind (Last _ _ _) = Nothing
+rightHoleKind (Lone _ _) = Nothing
+rightHoleKind (Middle _ _ k) = Just k
+
+nextPart (First _ r _) = r
+nextPart (Last _ _ _) = []
+nextPart (Lone _ _) = []
+nextPart (Middle _ r _) = r
 
 continue :: String -> Part -> Bool
 continue t p = t `elem` nextPart p
@@ -341,28 +347,32 @@ continue t p = t `elem` nextPart p
 part :: Op -> Part
 
 part (Infix [] _ _ _) = error "part called on malformed infix operator"
-part (Infix [_] [] _ _) = Lone BothOpen
-part (Infix [_] (r:_) _ _) = First True [r]
-part (Infix l [] _ _) = Last True [last $ init l]
-part (Infix l (r:_) _ _) = Middle [last $ init l] [r]
+part (Infix [_] [] _ _) = Lone BothOpen True
+part (Infix [_] (r:_) _ _) = First True [r] Distfix
+part (Infix l [] _ _) = Last True [last $ init l] True
+part (Infix l (r:_) _ _) = Middle [last $ init l] [r] Distfix
 
 part (Prefix [] _ _) = error "part called on malformed prefix operator"
-part (Prefix [_] [] _) = Lone RightOpen
-part (Prefix [_] (r:_) _) = First False [r]
-part (Prefix l [] _) = Last True [last $ init l]
-part (Prefix l (r:_) _) = Middle [last $ init l] [r]
+part (Prefix [_] [] _) = Lone RightOpen True
+part (Prefix [_] (r:_) _) = First False [r] Distfix
+part (Prefix l [] _) = Last True [last $ init l] True
+part (Prefix l (r:_) _) = Middle [last $ init l] [r] Distfix
 
 part (Postfix [] _ _) = error "part called on malformed postfix operator"
-part (Postfix [_] [] _) = Lone LeftOpen
-part (Postfix [_] (r:_) _) = First True [r]
-part (Postfix l [] _) = Last False [last $ init l]
-part (Postfix l (r:_) _) = Middle [last $ init l] [r]
+part (Postfix [_] [] _) = Lone LeftOpen True
+part (Postfix [_] (r:_) _) = First True [r] Distfix
+part (Postfix l [] _) = Last False [last $ init l] True
+part (Postfix l (r:_) _) = Middle [last $ init l] [r] Distfix
 
 part (Closed [] _ _) = error "part called on malformed closed operator"
 part (Closed [_] [] _) = error "part called on malformed closed operator"
-part (Closed [_] (r:_) _) = First False [r]
-part (Closed l [] _) = Last False [last $ init l]
-part (Closed l (r:_) _) = Middle [last $ init l] [r]
+part (Closed [_] (r:_) SExpression) = First False [r] SExpression
+part (Closed [_] (r:_) _) = First False [r] Distfix
+part (Closed l [] Discard) = Last False [last $ init l] False
+part (Closed l [] DistfixAndDiscard) = Last False [last $ init l] False
+part (Closed l [] _) = Last False [last $ init l] True
+part (Closed l (r:_) SExpression) = Middle [last $ init l] [r] SExpression
+part (Closed l (r:_) _) = Middle [last $ init l] [r] Distfix
 
 parts :: Op -> ([String], [String])
 parts (Infix l r _ _) = (l,r)

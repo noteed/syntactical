@@ -125,10 +125,8 @@ shunt table ts = case fix $ initial ts of
 step :: Table -> Shunt -> Shunt
 
 step table (S tt (s@(Op y):ss) oo@(os:oss) _) |
-  let o2 = head $ findOps y table
-      (_,r2) = parts o2
-      end = null r2
-  in end && (isClosed o2 || isPostfix o2)
+  let pt2 = part . head $ findOps y table
+  in isLast pt2 && (not $ rightHole pt2)
   = case head $ findOps y table of
   Closed _ _ Discard -> S (o:tt) ss (os':oss) MatchedR
     where (o:os') = os
@@ -177,21 +175,19 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
       rightHole2 = rightHole pt2
   in
   case (o1, o2) of
-    (Closed [_] _ DistfixAndDiscard, Closed [_] _ SExpression) ->
+    _ | rightHoleKind pt1 == Just Distfix && rightHoleKind pt2 == Just SExpression ->
       S ts (Op [x]:st) oo StackL
-    (Closed [_] _ Distfix, Closed [_] _ SExpression) ->
-      S ts (Op [x]:st) oo StackL
-    (Closed [_] _ SExpression, _) ->
+    _ | rightHoleKind pt1 == Just SExpression ->
       S ts (Op [x]:st) ([]:oo) StackL
-    (Closed _ [] SExpression, Closed _ [_] SExpression)
-      | x `continue` pt2 && stackedOp ru ->
-        S (Sym "⟨⟩":ts) ss (h:oss') MakeInert
-      | x `continue` pt2 ->
-        S ts ss ((ap:h):oss') MatchedR
-        where (os':h:oss') = oo
-              ap = Node (reverse os')
-    (_, Closed [_] _ SExpression) ->
-      S ts st ((t:os):oss) SExpr
+
+    _ | rightHoleKind pt2 == Just SExpression ->
+      if x `continue` pt2
+      then let (os':h:oss') = oo
+               ap = Node (reverse os')
+           in if stackedOp ru
+              then S (Sym (concat $ y++[x]):ts) ss (h:oss') MakeInert -- build the () symbol
+              else S ts ss ((ap:h):oss') MatchedR
+      else S ts st ((t:os):oss) SExpr
 
     _ | not (isFirst pt1) && not (isLast  pt2) && not (x `continue` pt2) ->
        S tt st oo (failure $ Incomplete y)
