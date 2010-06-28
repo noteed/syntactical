@@ -6,14 +6,15 @@ import Test.HUnit hiding (Test)
 import System.Environment (getArgs)
 
 import Text.Syntactical
+import Text.Syntactical.Data
 
 table0 :: Table
 table0 = buildTable
- [ [ closed "(" [] ")" DistfixAndDiscard
+ [ [ closed_ "(" [] ")" Distfix
    , closed "⟨" [] "⟩" SExpression
-   , closed "</" []"/>" Keep
-   , closed "[" ["|"] "]" Keep
-   , closed "{" [] "}" Keep
+   , closed "</" []"/>" Distfix
+   , closed "[" ["|"] "]" Distfix
+   , closed "{" [] "}" Distfix
    ]
  , [ infx "?'" [":'"] RightAssociative
    , postfx "!" []

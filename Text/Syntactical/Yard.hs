@@ -24,6 +24,7 @@ module Text.Syntactical.Yard
   ) where
 
 import Data.List (intersperse)
+import Data.Maybe (fromJust)
 
 import Text.Syntactical.Data
 
@@ -125,10 +126,10 @@ shunt table ts = case fix $ initial ts of
 step :: Table -> Shunt -> Shunt
 
 step table (S tt (s@(Op y):ss) oo@(os:oss) _) |
-  let pt2 = part . head $ findOps y table
+  let Just pt2 = findPart' table y
   in isLast pt2 && (not $ rightHole pt2)
-  = case head $ findOps y table of
-  o2 | discard (part o2) ->
+  = case findPart' table y of
+  Just pt2 | discard pt2 ->
     let (o:os') = os in S (o:tt) ss (os':oss) MatchedR
      | otherwise ->
     let ((o:os'):oss') = apply table s oo in S (o:tt) ss (os':oss') MatchedR
@@ -139,8 +140,8 @@ step table (S tt (s@(Op y):ss) oo@(os:oss) _) |
 step table sh@(S tt@(t@(Num b):ts) st oo@(os:oss) _) = case sh of
   S _ (Sym _:_)  ((Num _:_):_) _     -> S ts st ((t:os):oss) Inert
   S _ (Node _:_) ((Num _:_):_) _     -> S ts st ((t:os):oss) Inert
-  S _ (Op x:_)   ((Num a:_):_) Inert -> case findOps x table of
-    [o2] | rightHoleKind (part o2) == Just SExpression ->
+  S _ (Op y:_)   ((Num a:_):_) Inert -> case findPart' table y of
+    Just pt2 | rightHoleKind pt2 == Just SExpression ->
       S ts st ((t:os):oss) Inert
          | otherwise ->
       S tt st oo (failure $ CantApply a b)
@@ -150,8 +151,8 @@ step table sh@(S tt@(t@(Num b):ts) st oo@(os:oss) _) = case sh of
 -- An applicator is on the input stack.
 step table (S (t:ts) st@(s:_) oo@(os:oss) _)
   | applicator table t = case s of
-  Op y -> case findOps y table of
-    [o2] | rightHoleKind (part o2) == Just SExpression ->
+  Op y -> case findPart' table y of
+    Just pt2 | rightHoleKind pt2 == Just SExpression ->
       S ts st ((t:os):oss) SExpr
          | otherwise ->
       S ts (t:st) ([]:oo) StackApp
@@ -162,9 +163,9 @@ step table (S (t:ts) st@(s:_) oo@(os:oss) _)
 -- An operator part is on the input stack and an applicator is on
 -- the stack.
 step table (S tt@((Sym x):ts) st@(s:ss) oo _)
-  | applicator table s = go (part . head $ findOp x table)
+  | applicator table s = go (findPart table x)
   where
-    go pt1
+    go (Just pt1)
       | isFirst pt1 && not (leftHole pt1) && rightHoleKind pt1 == Just SExpression =
       S ts (Op [x]:st) ([]:oo) StackL
       | isFirst pt1 && not (leftHole pt1) =
@@ -174,7 +175,7 @@ step table (S tt@((Sym x):ts) st@(s:ss) oo _)
 
 -- An operator part is on the input stack and on the stack.
 step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
-  let (o1, o2) = findOperators table x y in go (part o1) (part o2)
+  let (pt1, pt2) = findParts table x y in go pt1 pt2
   where
     go pt1 pt2
       | rightHoleKind pt1 == Just Distfix && rightHoleKind pt2 == Just SExpression =
@@ -210,22 +211,22 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
 step table sh@(S [] (s:ss) oo _) = case s of
   Sym _              -> S [] ss (apply table s oo) FlushApp
   Node _             -> S [] ss (apply table s oo) FlushApp
-  Op y | isLast . part . head $ findOps y table ->
+  Op y | isLast . fromJust $ findPart' table y ->
     -- The infix or prefix operator has all its parts.
     -- The postfix/closed is handled in the first equation.
     S [] ss (apply table s oo) FlushOp
        | otherwise ->
     -- The operator is not complete.
-    sh { rule = failure $ nextPart (part . head $ findOps y table) `MissingAfter` y }
+    sh { rule = failure $ nextPart (fromJust $ findPart' table y) `MissingAfter` y }
   Num _ -> error "can't happen: but TODO make a specific data type for the op stack"
 
 -- The applicator/operator stack is empty.
 step table sh@(S (t:ts) [] oo ru) = case t of
   Node _ -> S ts [t] ([]:oo) StackApp
-  Sym x -> case findOp x table of
-    []   -> S ts [t] ([]:oo) StackApp
+  Sym x -> case findPart table x of
+    Nothing   -> S ts [t] ([]:oo) StackApp
     -- x is the first sub-op, and the stack is empty
-    [o1] -> go x (part o1)
+    Just pt1 -> go x pt1
   Num _ -> error "can't happen: Num is handled in a previous equation"
   Op _ -> error "can't happen: but TODO make a specifi data type for the input stack"
   where
@@ -255,8 +256,8 @@ apply table s@(Op y) (os:oss) =
   then error $ "not enough arguments supplied to " ++ show y
   else (Node (s:reverse l) : r) : oss
   where nargs = case findOps y table of
-          [Infix _ _ _ _] -> length y + 1
-          [Closed _ _ _] -> length y - 1
+          [Op1 _ _ xs (BothOpen _) _ _] -> length xs + 2
+          [Op2 _ _ xs _ _] -> length xs + 1
           [_] -> length y
           _ -> error $ "bug: wrong use of apply: " ++ show y
         (l,r) = splitAt nargs os

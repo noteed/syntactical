@@ -1,6 +1,7 @@
 module Text.Syntactical.Data where
 
 import Data.List
+import Data.Maybe (fromJust)
 
 data Tree = Node [Tree]
 -- The to-be-shunted tokens. Only the information for the
@@ -13,56 +14,26 @@ data Tree = Node [Tree]
            | Op [String] -- on the stack, TODO turn into Sym on the output
   deriving Eq
 
-data Op =
-    Infix
-  { opL :: [String]
-  , opR :: [String]
-  , opA :: Associativity
-  , opP :: Precedence
-  }
-  | Prefix
-  { opL :: [String]
-  , opR :: [String]
-  , opP :: Precedence
-  }
-  | Postfix
-  { opL :: [String]
-  , opR :: [String]
-  , opP :: Precedence
-  }
-  | Closed
-  { opL :: [String]
-  , opR :: [String]
-  , opK :: Kind
-  }
-  deriving (Eq, Show)
-
--- Alternative data type to represent operators.
--- The Kind specifies how the hole sould be parsed:
--- either as an s-expression (missing the brackets) or as
--- a distfix expression. Maybe it could be extended to
--- support user-defined parsers, ot at least a specific
--- operator table.
 -- The boolean is to specify if the operator should show up
--- in the result or be discarded.
+-- in the result or be discarded. The opening further specifies
+-- if the operator is prefix, infix, or postfix.
 -- e.g. ⟨1 2⟩ instead of ⟨+ 1 2⟩ when the + is retained.
 -- e.g. 1 instead of ⟨! 1⟩ when the ! is retained.
 -- e.g. ⟨1⟩ instead of ⟨! 1⟩ if the hole is also parsed as an s-expr.
-data OpX = Op1 Bool String [(Kind,String)] Opening Associativity Precedence
-         | Op2 Bool String Kind String [(Kind,String)]
+data Op =
+    Op1 Bool String [(Kind,String)] Opening Associativity Precedence
+  | Op2 Bool String [(Kind,String)] Kind String
+  deriving (Eq, Show)
 
 -- The Kind is used to give various behaviours when dealing
--- with Closed operators.
--- Discard means the Closed operator will be removed from the
--- resulting Tree.
--- Keep is the opposite of Discard.
--- SExpression means the 'content' of the Closed operator
--- should be parsed as an s-expression.
--- Distfix means the 'content' of the Closed operator
--- should be parsed as a distfix expression.
--- DistfixAndDiscard combines the meaning of both Discard and
--- Distfix.
-data Kind = Discard | Keep | SExpression | Distfix | DistfixAndDiscard
+-- with internal holes. Maybe it could be extended to
+-- support user-defined parsers, ot at least a specific
+-- operator table.
+-- SExpression means the 'content' of the hole should be
+-- parsed as an s-expression.
+-- Distfix means the 'content' of the hole should be parsed
+-- as a distfix expression.
+data Kind = SExpression | Distfix
   deriving (Eq, Show)
 
 data Associativity = NonAssociative | LeftAssociative | RightAssociative
@@ -70,24 +41,26 @@ data Associativity = NonAssociative | LeftAssociative | RightAssociative
 
 type Precedence = Int
 
-data Table = Table [Op]
+newtype Table = Table [Op]
 
 infx :: String -> [String] -> Associativity -> Op
-infx f rest a = Infix [] (f:rest) a 0
+-- TODO the associativity is present twice
+infx f rest a = Op1 True f (zip (repeat Distfix) rest) (BothOpen a) a 0
 
 prefx :: String -> [String] -> Op
-prefx f rest = Prefix [] (f:rest) 0
+prefx f rest = Op1 True f (zip (repeat Distfix) rest) (RightOpen True) RightAssociative 0
 
 postfx :: String -> [String] -> Op
-postfx f rest = Postfix [] (f:rest) 0
+postfx f rest = Op1 True f (zip (repeat Distfix) rest) (LeftOpen True) RightAssociative 0
 
 closed :: String -> [String] -> String -> Kind -> Op
-closed f rest l k = Closed [] (f:rest++[l]) k
+closed f rest l k = Op2 True f (zip (repeat k) rest) k l
+
+closed_ :: String -> [String] -> String -> Kind -> Op
+closed_ f rest l k = Op2 False f (zip (repeat k) rest) k l
 
 setPrecedence :: Precedence -> Op -> Op
-setPrecedence p (Infix l r a _) = Infix l r a p
-setPrecedence p (Prefix l r _) = Prefix l r p
-setPrecedence p (Postfix l r _) = Postfix l r p
+setPrecedence p (Op1 keep x xs opening a _) = Op1 keep x xs opening a p
 setPrecedence _ c = c
 
 -- buildTable constructs an operator table that can be
@@ -120,28 +93,20 @@ isOp (Op _) = True
 isOp _ = False
 
 isInfix :: Op -> Bool
-isInfix (Infix _ _ _ _) = True
+isInfix (Op1 _ _ _ (BothOpen _) _ _) = True
 isInfix _ = False
 
 isPrefix :: Op -> Bool
-isPrefix (Prefix _ _ _) = True
+isPrefix (Op1 _ _ _ (LeftOpen _) _ _) = True
 isPrefix _ = False
 
 isPostfix :: Op -> Bool
-isPostfix (Postfix _ _ _) = True
+isPostfix (Op1 _ _ _ (RightOpen _) _ _) = True
 isPostfix _ = False
 
 isClosed :: Op -> Bool
-isClosed (Closed _ _ _) = True
+isClosed (Op2 _ _ _ _ _) = True
 isClosed _ = False
-
-isInfix' :: Op -> [String] -> Bool
-isInfix' (Infix xs _ _ _) ys = xs == ys
-isInfix' _ _ = False
-
-isSExpression :: Op -> Bool
-isSExpression (Closed _ _ SExpression) = True
-isSExpression _ = False
 
 lower :: Part -> Part -> Bool
 lower pt1 pt2 = case (associativity pt1, associativity pt2) of
@@ -156,19 +121,28 @@ lower pt1 pt2 = case (associativity pt1, associativity pt2) of
           | a1 == NonAssociative && p1 <= p2 = True
           | otherwise = False
 
-findOp :: String -> Table -> [Op]
-findOp op (Table t) = findOp' op t
+findPart :: Table -> String -> Maybe Part
+findPart table x = case findOp' x table of
+  [pt] -> Just pt
+  [] -> Nothing
 
-findOp' :: String -> [Op] -> [Op]
-findOp' _ [] = []
-findOp' op (o:os) =
-  case parts o of
-   ([], pts) ->
-     if op `elem` pts
-     then let (l,r) = break' (== op) pts
-          in o { opL = l , opR = r } : findOp' op os
-     else findOp' op os
-   _ -> error "findOp called on malformed operator table"
+findOp' :: String -> Table -> [Part]
+findOp' _ (Table []) = []
+findOp' op (Table (o:os)) =
+  if op `elem` parts o
+  then part' op o : findOp' op (Table os)
+  else findOp' op (Table os)
+
+findPart' :: Table -> [String] -> Maybe Part
+findPart' table xs = case findPart'' table xs of
+  [pt] -> Just pt
+  [] -> Nothing
+
+findPart'' (Table []) _ = []
+findPart'' (Table (o:os)) xs =
+  if xs `isPrefixOf` parts o
+  then part' (last xs) o : findPart'' (Table os) xs
+  else findPart'' (Table os) xs
 
 findOps :: [String] -> Table -> [Op]
 findOps ops (Table t) = findOps' ops t
@@ -176,20 +150,12 @@ findOps ops (Table t) = findOps' ops t
 findOps' :: [String] -> [Op] -> [Op]
 findOps' _ [] = []
 findOps' ops (o:os) =
-  case parts o of
-   ([], pts) ->
-     if ops `isPrefixOf` pts
-     then o { opL = ops , opR = drop (length ops) pts } : findOps' ops os
-     else findOps' ops os
-   _ -> error "findOps called on malformed operator table"
-
-break' :: (a -> Bool) -> [a] -> ([a], [a])
-break' p ls = case break p ls of
-  (_, []) -> error "break': no element in l satisfying p"
-  (l, r:rs) -> (l ++ [r], rs)
+  if ops `isPrefixOf` parts o
+  then o : findOps' ops os
+  else findOps' ops os
 
 applicator :: Table -> Tree -> Bool
-applicator table (Sym x) = findOp x table == []
+applicator table (Sym x) = findPart table x == Nothing
 applicator _ (Node _) = True
 applicator _ _ = False
 
@@ -207,24 +173,27 @@ applicator _ _ = False
 -- For now, the fixity of the possible operators should
 -- be the same although it is possible to, e.g., allow
 -- /_/ and /_\_
-findOperators :: Table -> String -> [String] -> (Op, Op)
-findOperators table x y =
+findParts :: Table -> String -> [String] -> (Part, Part)
+findParts table x y = (fromJust $ findPart table x, fromJust $ findPart' table y)
+{-
+findParts table x y =
   if nonAmbiguous xs && nonAmbiguous ys
-  then if null xy then (head xs, head ys) else head xy
+  then if null xy then (part $ head xs, part $ head ys) else head xy
   else if nonAmbiguous xs then error $ "ambiguous operators " ++ show ys
                      else error $ "ambiguous operators " ++ show xs
   where xs = findOp x table
         ys = findOps y table
-        xy = [(a,b) | a <- xs, b <- ys, x `continue` (part b)]
+        xy = [(part a, part b) | a <- xs, b <- ys, x `continue` (part b)]
+-}
 
 -- TODO check precedence/associativity
 nonAmbiguous :: [Op] -> Bool
 nonAmbiguous [] = True
-nonAmbiguous (o:os) = case o of
-  Infix _ _ _ _ -> all isInfix os
-  Prefix _ _ _ -> all isPrefix os
-  Postfix _ _ _ -> all isPostfix os
-  Closed _ _ _ -> all isClosed os
+nonAmbiguous (o:os)
+  | isInfix o = all isInfix os
+  | isPrefix o = all isPrefix os
+  | isPostfix o = all isPostfix os
+  | isClosed o = all isClosed os
 
 -- Parts
 -- Examples:
@@ -254,20 +223,25 @@ data Part = First (Maybe (Associativity,Precedence)) [String] Kind
 -- possible predecessor and successor parts, both non-empty, s-expr/distfix
   deriving (Show, Eq)
 
+isLone :: Part -> Bool
 isLone (Lone _ _ _) = True
 isLone _ = False
 
+isFirst :: Part -> Bool
 isFirst (Lone _ _ _) = True
 isFirst (First _ _ _) = True
 isFirst _ = False
 
+isLast :: Part -> Bool
 isLast (Lone _ _ _) = True
 isLast (Last _ _ _) = True
 isLast _ = False
 
+isMiddle :: Part -> Bool
 isMiddle (Middle _ _ _) = True
 isMiddle _ = False
 
+discard :: Part -> Bool
 discard (First _ _ _) = False
 discard (Last _ _ keep) = not keep
 discard (Lone _ _ keep) = not keep
@@ -310,11 +284,13 @@ associativity (Lone (RightOpen a) p _) = Just (a',p)
 associativity (Lone (BothOpen a) p _) = Just (a,p)
 associativity (Middle _ _ _) = Nothing
 
+nextPart :: Part -> [String]
 nextPart (First _ r _) = r
 nextPart (Last _ _ _) = []
 nextPart (Lone _ _ _) = []
 nextPart (Middle _ r _) = r
 
+previousPart :: Part -> [String]
 previousPart (First _ _ _) = []
 previousPart (Last _ l _) = l
 previousPart (Lone _ _ _) = []
@@ -323,39 +299,31 @@ previousPart (Middle l _ _) = l
 continue :: String -> Part -> Bool
 continue t p = t `elem` nextPart p
 
-part :: Op -> Part
+part' :: String -> Op -> Part
+-- TODO actually, multiple possibilities exist
+part' s (Op1 keep x [] opening _ p) | s == x = Lone opening p keep
+part' s (Op1 _ x xs (LeftOpen _) a p) | s == x = First (Just (a,p)) [snd $ head xs] Distfix
+part' s (Op1 _ x xs (BothOpen _) a p) | s == x = First (Just (a,p)) [snd $ head xs] Distfix
+part' s (Op1 _ x xs (RightOpen _) _ _) | s == x = First Nothing [snd $ head xs] Distfix
+part' s (Op1 _ x ([x']) (RightOpen _) a p) | s == snd x' = Last (Just (a,p)) [x] True
+part' s (Op1 _ x ([x']) (BothOpen _) a p) | s == snd x' = Last (Just (a,p)) [x] True
+part' s (Op1 _ x ([x']) (LeftOpen _) _ _) | s == snd x' = Last Nothing [x] True
+part' s (Op1 _ _ xs (RightOpen _) a p) | s == snd (last xs) = Last (Just (a,p)) [snd . last $ init xs] True
+part' s (Op1 _ _ xs (BothOpen _) a p) | s == snd (last xs) = Last (Just (a,p)) [snd . last $ init xs] True
+part' s (Op1 _ _ xs (LeftOpen _) _ _) | s == snd (last xs) = Last Nothing [snd . last $ init xs] True
+part' s (Op1 _ x xs _ _ _) | s == snd (head xs) = Middle [x] [snd . head . drop 1 $ xs] Distfix
+part' s (Op1 _ _ xs _ _ _) | s `elem` (map snd $ init xs) = Middle [last . takeWhile (s /=) $ map snd xs] [head . drop 1 . dropWhile (s /=) $ map snd xs] Distfix
 
-part (Infix [] _ _ _) = error "part called on malformed infix operator"
-part (Infix [_] [] a p) = Lone (BothOpen a) p True
-part (Infix [_] (r:_) a p) = First (Just (a,p)) [r] Distfix
-part (Infix l [] a p) = Last (Just (a,p)) [last $ init l] True
-part (Infix l (r:_) _ _) = Middle [last $ init l] [r] Distfix
+part' s (Op2 _ x [] h y) | s == x = First Nothing [y] h
+part' s (Op2 keep x [] _ y) | s == y = Last Nothing [x] keep
+part' s (Op2 _ x xs h _) | s == x = First Nothing [snd $ head xs] h
+part' s (Op2 keep _ xs _ y) | s == y = Last Nothing [snd $ last xs] keep
+part' s (Op2 _ x [x'] h y) | s == (snd x') = Middle [x] [y] h
+part' s (Op2 _ x xs h _) | s == (snd $ head xs) = Middle [x] [snd . head . drop 1 $ xs] h
+part' s (Op2 _ _ xs h y) | s == (snd $ last xs) = Middle [snd . last . init $ xs] [y] h
+part' s (Op2 _ _ xs h _) | s `elem` (map snd $ init xs) = Middle [last . takeWhile (s /=) $ map snd xs] [head . drop 1 . dropWhile (s /=) $ map snd xs] h
 
-part (Prefix [] _ _) = error "part called on malformed prefix operator"
-part (Prefix [_] [] p) = Lone (RightOpen True) p True
-part (Prefix [_] (r:_) _) = First Nothing [r] Distfix
-part (Prefix l [] p) = Last (Just (RightAssociative,p)) [last $ init l] True
-part (Prefix l (r:_) _) = Middle [last $ init l] [r] Distfix
-
-part (Postfix [] _ _) = error "part called on malformed postfix operator"
-part (Postfix [_] [] p) = Lone (LeftOpen True) p True
-part (Postfix [_] (r:_) p) = First (Just (LeftAssociative,p)) [r] Distfix
-part (Postfix l [] _) = Last Nothing [last $ init l] True
-part (Postfix l (r:_) _) = Middle [last $ init l] [r] Distfix
-
-part (Closed [] _ _) = error "part called on malformed closed operator"
-part (Closed [_] [] _) = error "part called on malformed closed operator"
-part (Closed [_] (r:_) SExpression) = First Nothing [r] SExpression
-part (Closed [_] (r:_) _) = First Nothing [r] Distfix
-part (Closed l [] Discard) = Last Nothing [last $ init l] False
-part (Closed l [] DistfixAndDiscard) = Last Nothing [last $ init l] False
-part (Closed l [] _) = Last Nothing [last $ init l] True
-part (Closed l (r:_) SExpression) = Middle [last $ init l] [r] SExpression
-part (Closed l (r:_) _) = Middle [last $ init l] [r] Distfix
-
-parts :: Op -> ([String], [String])
-parts (Infix l r _ _) = (l,r)
-parts (Prefix l r _) = (l,r)
-parts (Postfix l r _) = (l,r)
-parts (Closed l r _) = (l,r)
+parts :: Op -> [String]
+parts (Op1 _ x xs _ _ _) = x : map snd xs
+parts (Op2 _ x xs _ y) = x : map snd xs ++ [y]
 
