@@ -302,9 +302,9 @@ continue t p = t `elem` nextPart p
 part' :: String -> Op -> Part
 -- TODO actually, multiple possibilities exist
 part' s (Op1 keep x [] opening _ p) | s == x = Lone opening p keep
-part' s (Op1 _ x xs (LeftOpen _) a p) | s == x = First (Just (a,p)) [snd $ head xs] Distfix
-part' s (Op1 _ x xs (BothOpen _) a p) | s == x = First (Just (a,p)) [snd $ head xs] Distfix
-part' s (Op1 _ x xs (RightOpen _) _ _) | s == x = First Nothing [snd $ head xs] Distfix
+part' s (Op1 _ x xs (LeftOpen _) a p) | s == x = First (Just (a,p)) [snd $ head xs] (fst $ head xs)
+part' s (Op1 _ x xs (BothOpen _) a p) | s == x = First (Just (a,p)) [snd $ head xs] (fst $ head xs)
+part' s (Op1 _ x xs (RightOpen _) _ _) | s == x = First Nothing [snd $ head xs] (fst $ head xs)
 part' s (Op1 _ x ([x']) (RightOpen _) a p) | s == snd x' = Last (Just (a,p)) [x] True
 part' s (Op1 _ x ([x']) (BothOpen _) a p) | s == snd x' = Last (Just (a,p)) [x] True
 part' s (Op1 _ x ([x']) (LeftOpen _) _ _) | s == snd x' = Last Nothing [x] True

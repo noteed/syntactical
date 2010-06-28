@@ -11,7 +11,7 @@ import Text.Syntactical.Data
 table0 :: Table
 table0 = buildTable
  [ [ closed_ "(" [] ")" Distfix
-   , closed "⟨" [] "⟩" SExpression
+   , closed_ "⟨" [] "⟩" SExpression
    , closed "</" []"/>" Distfix
    , closed "[" ["|"] "]" Distfix
    , closed "{" [] "}" Distfix

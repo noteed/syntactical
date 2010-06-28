@@ -189,7 +189,7 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
                ap = Node (reverse os')
            in if stackedOp ru
               then S (Sym (concat $ y++[x]):ts) ss (h:oss') MakeInert -- build the () symbol
-              else S ts ss ((ap:h):oss') MatchedR
+              else S ts (Op (y++[x]):ss) ((ap:h):oss') MatchedR
       else S ts st ((t:os):oss) SExpr
 
       | not (isFirst pt1) && not (isLast  pt2) && not (x `continue` pt2) =
