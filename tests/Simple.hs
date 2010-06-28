@@ -38,6 +38,8 @@ table0 = buildTable
    ]
  , [ infx "," [] RightAssociative
    ]
+ , [ Op1 True "\\" [(SExpression,"->")] (RightOpen True) RightAssociative 0
+   ]
  , [ prefx "let" ["in"]
    , infx "where" [] RightAssociative
    , prefx "case" ["of"]
@@ -200,6 +202,10 @@ testsTable0 = [
   , ("⟨⟩", "⟨⟩")
   , ("⟨⟩ a", "⟨⟨⟩ a⟩")
   , ("f ⟨⟩ 1", "⟨f ⟨⟩ 1⟩")
+
+  , ("\\ a b -> a + b", "⟨\\-> ⟨a b⟩ ⟨+ a b⟩⟩")
+  , ("\\ a 2 -> a + b", "⟨\\-> ⟨a 2⟩ ⟨+ a b⟩⟩")
+  , ("\\ 1 2 -> a + b", "⟨\\-> ⟨1 2⟩ ⟨+ a b⟩⟩")
   ]
 
 testsTable0' :: [(String, Failure)]
@@ -280,7 +286,7 @@ separate' ('⟩':cs) = " ⟩ " ++ separate' cs
 separate' (c:cs) = c : separate' cs
 separate' [] = []
 
-token (c:cs) | c `elem` ['a'..'z'] ++ "()⟨⟩+-*/?:#i°%!<>[]|,{};=\"._" = Sym (c:cs)
+token (c:cs) | c `elem` ['a'..'z'] ++ "()⟨⟩+-*/?:#i°%!<>[]|,{};=\"._\\" = Sym (c:cs)
              | otherwise = Num (read [c])
 
 -- 
