@@ -8,6 +8,8 @@ import System.Environment (getArgs)
 import Text.Syntactical
 import Text.Syntactical.Data
 
+import qualified Holes
+
 table0 :: Table
 table0 = buildTable
  [ [ closed_ "(" [] ")" Distfix
@@ -210,12 +212,12 @@ testsTable0 = [
 
 testsTable0' :: [(String, Failure)]
 testsTable0' =
-  [ ("true then 1 else 0", MissingBefore ["if"] "then")
+  [ ("true then 1 else 0", MissingBefore [["if"]] "then")
   , ("if true 1 else 0", Incomplete ["if"]) -- MissingBefore ["then"] "else")
-  , ("true 1 else 0", MissingBefore ["then"] "else")
+  , ("true 1 else 0", MissingBefore [["if","then"]] "else")
   , ("if true then 1", MissingAfter ["else"] ["if","then"])
   , ("[ a | b", MissingAfter ["]"] ["[","|"])
-  , ("a | b ]", MissingBefore ["["] "|")
+  , ("a | b ]", MissingBefore [["["]] "|")
   , ("[ a b ]", Incomplete ["["]) -- MissingBefore ["|"] "]")
   , ("1 2", CantApply 1 2)
   , ("(1 2)", CantApply 1 2)
@@ -227,12 +229,12 @@ testsTable0' =
   , ("()", EmptyHole "(" ")")
   , ("[ | b ]", EmptyHole "[" "|")
   , ("[ a | ]", EmptyHole "|" "]")
-  , ("true ? 1 : true then 1 else 0", MissingBefore ["if"] "then")
+  , ("true ? 1 : true then 1 else 0", MissingBefore [["if"]] "then")
   , ("true ? 1 : then 1 else 0", EmptyHole ":" "then") -- MissingBefore ["if"] "then")
   , ("a _/ /.", EmptyHole "_/" "/.")
   , ("a _/ b", MissingAfter ["/."] ["_/"])
   , ("(+ 2)", EmptyHole "(" "+")
-  , ("true : 1 + 2", MissingBefore ["?"] ":")
+  , ("true : 1 + 2", MissingBefore [["?"]] ":")
 -- TODO cases above with parenthesis or in bigger expression.
 -- TODO obviously those are not success, but I have to
 -- create and recognize the error cases.
@@ -298,10 +300,13 @@ main = defaultMain
 
 testYard :: Test
 testYard = testGroup "Text.Syntactical.Yard"
-  [ testGroup "Text.Syntactical.Tests.Examples - table0" $
+  [ testGroup "Simple" $
     map (helper parse0) testsTable0
-  , testGroup "Text.Syntactical.Tests.Examples - table0 - bad input" $
+  , testGroup "Simple (bad input)" $
     map (helper' parse0) testsTable0'
+  , testGroup "Holes" $
+    map (helper $ shunt Holes.table . tokenize) Holes.tests
+
   ]
 
 -- Apply the parser p to i and check if it returns
