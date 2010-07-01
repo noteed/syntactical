@@ -1,4 +1,12 @@
-module Text.Syntactical.Data where
+module Text.Syntactical.Data (
+  Tree(..), Op(..), Opening(..), Associativity(..), Kind(..), Table(..),
+  infx, prefx, postfx, closed, closed_,
+  buildTable,
+  begin, end, leftHole, rightHole, rightHoleKind, discard,
+  applicator, continue, lower,
+  nextPart, previousPart,
+  findBoth, findOps, findPart, findPart'
+  ) where
 
 import Data.List
 import Data.Maybe (fromJust)
@@ -84,30 +92,6 @@ display = tail . display'
   display' (Op l) = ' ' : concat l
   display' (Node es) = ' ' : '⟨' : tail (concatMap display' es) ++ "⟩"
 
-isSym :: Tree -> Bool
-isSym (Sym _) = True
-isSym _ = False
-
-isOp :: Tree -> Bool
-isOp (Op _) = True
-isOp _ = False
-
-isInfix :: Op -> Bool
-isInfix (Op1 _ _ _ (BothOpen _) _ _) = True
-isInfix _ = False
-
-isPrefix :: Op -> Bool
-isPrefix (Op1 _ _ _ (LeftOpen _) _ _) = True
-isPrefix _ = False
-
-isPostfix :: Op -> Bool
-isPostfix (Op1 _ _ _ (RightOpen _) _ _) = True
-isPostfix _ = False
-
-isClosed :: Op -> Bool
-isClosed (Op2 _ _ _ _ _) = True
-isClosed _ = False
-
 lower :: Part -> Part -> Bool
 lower pt1 pt2 = case (associativity pt1, associativity pt2) of
   (Just (a1,p1), Just (a2,p2)) | begin pt1 && end pt2 ->
@@ -128,8 +112,8 @@ lower pt1 pt2 = case (associativity pt1, associativity pt2) of
 findPart :: Table -> String -> Maybe Part
 findPart table x = case filterParts $ findOp' table x of
   ([],[],[],[]) -> Nothing
-  (l@(_:_),f@(_:_),_,_) -> error "findPart: ambiguous: lone or first part"
-  (_,_,m@(_:_),l@(_:_)) -> error "findPart: ambiguous: middle or last part"
+  ((_:_),(_:_),_,_) -> error "findPart: ambiguous: lone or first part"
+  (_,_,(_:_),(_:_)) -> error "findPart: ambiguous: middle or last part"
   (l@(_:_),_,_,_) -> Just $ groupLone l
   (_,f@(_:_),_,_) -> Just $ groupFirst f
   (_,_,m@(_:_),_) -> Just $ groupMiddle m
@@ -148,8 +132,9 @@ findOp' (Table (o:os)) op =
 findPart' :: Table -> [String] -> Maybe Part
 findPart' table xs = case findPart'' table xs of
   [] -> Nothing
-  x@(pt:_) -> Just pt
+  (pt:_) -> Just pt
 
+findPart'' :: Table -> [String] -> [Part]
 findPart'' (Table []) _ = []
 findPart'' (Table (o:os)) xs =
   if xs `isPrefixOf` parts o
@@ -171,6 +156,7 @@ applicator table (Sym x) = findOp' table x == []
 applicator _ (Node _) = True
 applicator _ _ = False
 
+findContinuing :: Table -> String -> [Part] -> Maybe (Part, Part)
 findContinuing table x ys =
   case ab of
     [] -> Nothing
@@ -215,22 +201,6 @@ findBoth table x st = case findIncompletePart table st of
       (Op y:_) -> findPart' table y
       _ -> Nothing
 
-findFirst :: Table -> String -> Maybe Part
-findFirst table x = case findOp' table x of
-  [] -> Nothing
-  pts -> sameFirsts pts
-
-sameFirsts :: [Part] -> Maybe Part
-sameFirsts [] = Nothing
-sameFirsts (pt:pts) | begin pt =
-  if sameFirsts' (associativity pt) pts then Just pt else Nothing
-sameFirsts (_:pts) = Nothing
-
-sameFirsts' _ [] = True
-sameFirsts' a (pt:pts) | begin pt =
-  a == associativity pt && sameFirsts' a pts
-sameFirsts' _ _ = False
-
 filterParts :: [Part] -> ([Part],[Part],[Part],[Part])
 filterParts pts = (filter isLone pts, filter isFirst pts,
   filter isMiddle pts, filter isLast pts)
@@ -246,20 +216,22 @@ groupLone _ = error "groupLone: ambiguous lone part, only one allowed"
 
 groupFirst :: [Part] -> Part
 groupFirst [] = error "groupFirst: empty list"
-groupFirst (First a x s k:pts) = go a s k pts
+groupFirst (First a' x s' k':pts) = go a' s' k' pts
   where go a s k [] = First a x s k
         go a s k (First a2 _ s2 k2:xs)
           | a == a2 && k == k2 = go a (s `union` s2) k xs
         go _ _ _ _ = error "groupFirst: ambiguous first parts"
+groupFirst _ = error "groupFirst: not a First part"
 
 -- TODO k == k2 is necessary only when the prefix is the same
 groupMiddle :: [Part] -> Part
 groupMiddle [] = error "groupMiddle: empty list"
-groupMiddle (Middle ss x s k:pts) = go ss s k pts
+groupMiddle (Middle ss' x s' k':pts) = go ss' s' k' pts
   where go ss s k [] = Middle ss x s k
         go ss s k (Middle ss2 _ s2 k2:xs)
           | k == k2 = go (ss `union` ss2) (s `union` s2) k xs
         go _ _ _ _ = error "groupMiddle: ambiguous middle parts"
+groupMiddle _ = error "groupMiddle: not a Middle part"
 
 -- This is needed only to return something so that the
 -- shunt can complain about missing parts before this one.
@@ -269,10 +241,12 @@ groupMiddle (Middle ss x s k:pts) = go ss s k pts
 -- TODO x is assumed to be the same (idem for the other groupXxx functions).
 groupLast :: [Part] -> Part
 groupLast [] = error "groupLast: empty list"
-groupLast (Last a s x k:pts) = go a s k pts
+groupLast (Last a' s' x k':pts) = go a' s' k' pts
   where go a s k [] = Last a s x k
-        go a s k (Last a2 s2 _ k2:xs)
+        go a s k (Last _ s2 _ _:xs)
           = go a (s `union` s2) k xs
+        go _ _ _ _ = error "groupLast: not a Last part"
+groupLast _ = error "groupLast: not a Last part"
 
 -- Parts
 -- Examples:
@@ -334,6 +308,7 @@ discard (Last _ _ _ keep) = not keep
 discard (Lone _ _ _ keep) = not keep
 discard (Middle _ _ _ _) = False
 
+partSymbol :: Part -> String
 partSymbol (First _ s _ _) = s
 partSymbol (Last _ _ s _) = s
 partSymbol (Lone _ _ s _) = s
