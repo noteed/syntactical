@@ -1,15 +1,18 @@
 module Text.Syntactical.Data (
   Tree(..), Op(..), Opening(..), Associativity(..), Kind(..), Table(..),
+  findBegin, FindBegin(..),
   infx, prefx, postfx, closed, closed_,
   buildTable,
+  arity, partSymbol,
   begin, end, leftHole, rightHole, rightHoleKind, discard,
-  applicator, continue, lower,
+  applicator, continue, continue', lower,
   nextPart, previousPart,
   findBoth, findOps, findPart, findPart'
   ) where
 
 import Data.List
 import Data.Maybe (fromJust)
+import qualified Data.Map as M
 
 data Tree = Node [Tree]
 -- The to-be-shunted tokens. Only the information for the
@@ -19,7 +22,7 @@ data Tree = Node [Tree]
 -- original data instead of a Tree.
            | Num Int
            | Sym String
-           | Op [String] -- on the stack, TODO turn into Sym on the output
+           | Op Part -- on the stack, TODO turn into Sym on the output
   deriving Eq
 
 -- The boolean is to specify if the operator should show up
@@ -89,7 +92,7 @@ display = tail . display'
   where
   display' (Num i) = ' ' : show i
   display' (Sym s) = ' ' : s
-  display' (Op l) = ' ' : concat l
+  display' (Op y) = ' ' : concat (previousPart y ++ [partSymbol y])
   display' (Node es) = ' ' : '⟨' : tail (concatMap display' es) ++ "⟩"
 
 lower :: Part -> Part -> Bool
@@ -119,6 +122,30 @@ findPart table x = case filterParts $ findOp' table x of
   (_,_,m@(_:_),_) -> Just $ groupMiddle m
   (_,_,_,l@(_:_)) -> Just $ groupLast l
 
+findLone table x = if null ls
+  then Nothing
+  else Just $ groupLone ls
+  where
+  (ls,_,_,_) = filterParts $ findOp' table x
+
+findFirst table x = if null fs
+  then Nothing
+  else Just $ groupFirst fs
+  where
+  (_,fs,_,_) = filterParts $ findOp' table x
+
+findMiddle table x = if null ms
+  then Nothing
+  else Just $ groupMiddle ms
+  where
+  (_,_,ms,_) = filterParts $ findOp' table x
+
+findLast table x = if null ls
+  then Nothing
+  else Just $ groupLast ls
+  where
+  (_,_,_,ls) = filterParts $ findOp' table x
+
 findOp' :: Table -> String -> [Part]
 findOp' (Table []) _ = []
 findOp' (Table (o:os)) op =
@@ -126,13 +153,15 @@ findOp' (Table (o:os)) op =
   then part op o ++ findOp' (Table os) op
   else findOp' (Table os) op
 
--- By construction of the xs value on the operator stack,
--- only unambiguous parts should be returned and it should be
--- safe to select the first one.
 findPart' :: Table -> [String] -> Maybe Part
-findPart' table xs = case findPart'' table xs of
-  [] -> Nothing
-  (pt:_) -> Just pt
+findPart' table xs = case filterParts $ findPart'' table xs of
+  ([],[],[],[]) -> Nothing
+  ((_:_),(_:_),_,_) -> error "findPart: ambiguous: lone or first part"
+  (_,_,(_:_),(_:_)) -> error "findPart: ambiguous: middle or last part"
+  (l@(_:_),_,_,_) -> Just $ groupLone l
+  (_,f@(_:_),_,_) -> Just $ groupFirst f
+  (_,_,m@(_:_),_) -> Just $ groupMiddle m
+  (_,_,_,l@(_:_)) -> Just $ groupLast l
 
 findPart'' :: Table -> [String] -> [Part]
 findPart'' (Table []) _ = []
@@ -156,22 +185,21 @@ applicator table (Sym x) = findOp' table x == []
 applicator _ (Node _) = True
 applicator _ _ = False
 
-findContinuing :: Table -> String -> [Part] -> Maybe (Part, Part)
-findContinuing table x ys =
-  case ab of
+findContinuing :: Table -> String -> Part -> Maybe Part
+findContinuing table x y =
+  case as of
     [] -> Nothing
-    _ -> Just $ head ab
+    _ -> Just $ if isLast (head as) then groupLast as else groupMiddle as
   where xs = findOp' table x
-        ab = [(a,b) | a <- xs, b <- ys, x `continue` b]
+        as = [a | a <- xs, a `continue'` y]
 
 -- Search the operator stack for the top-most parts waiting to be completed
 -- (i.e. on the left of an innner hole).
-findIncompletePart :: Table -> [Tree] -> [String]
-findIncompletePart _ [] = []
+findIncompletePart :: Table -> [Tree] -> Maybe Part
+findIncompletePart _ [] = Nothing
 findIncompletePart table (Op y:ss) =
-  let pt = findPart'' table y in
-  if all (not . end) pt
-  then y
+  if (not . end) y
+  then Just y
   else findIncompletePart table ss
 findIncompletePart table (_:ss) = findIncompletePart table ss
 
@@ -190,20 +218,38 @@ findIncompletePart table (_:ss) = findIncompletePart table ss
 -- find, even if it is not First; one of the rules will
 -- generate a MissingBefore (in the [] case) or an Incomplete
 -- (in the pts2 case).
-findBoth :: Table -> String -> [Tree] -> (Part, Maybe Part)
+findBoth :: Table -> String -> [Tree] -> (Either Part FindBegin, Maybe Part)
 findBoth table x st = case findIncompletePart table st of
-  [] -> (fromJust $ findPart table x, b)
-  y' -> case findContinuing table x $ findPart'' table y' of
-    Just (a,c) -> (a, if Op y' == head st then Just c else b)
-    Nothing -> (fromJust $ findPart table x, b)
+  Nothing -> (Right $ findBegin table x, b)
+  Just y' -> case findContinuing table x y' of
+    Just a -> (Left a, if Op y' == head st then Just y' else b)
+    Nothing -> (Right $ findBegin table x, b)
   where
     b = case st of
-      (Op y:_) -> findPart' table y
+      (Op y:_) -> Just y
       _ -> Nothing
 
 filterParts :: [Part] -> ([Part],[Part],[Part],[Part])
 filterParts pts = (filter isLone pts, filter isFirst pts,
   filter isMiddle pts, filter isLast pts)
+
+data FindBegin = NoBegin | Begin Part | MissingBegin [[String]]
+--ContinueTop | ContinueBelow | Begin | Mismatch
+
+findBegin :: Table -> String -> FindBegin
+findBegin table x = case filterParts $ findOp' table x of
+  ([],[],[],[]) -> NoBegin
+  ((_:_),(_:_),_,_) -> error "findBegin: ambiguous: lone or first part"
+  (_,_,(_:_),(_:_)) -> error "findBegin: ambiguous: middle or last part"
+  (l@(_:_),_,_,_) -> Begin $ groupLone l
+  (_,f@(_:_),_,_) -> Begin $ groupFirst f
+  (_,_,m,l) -> MissingBegin $ map previousPart (m++l)
+
+allParts :: Table -> [Part]
+allParts (Table ops) = concatMap cut ops
+
+matchCurrent x pts = filter ((==x) .partSymbol) pts
+matchPrevious y pts = filter ((==y) . previousPart) pts
 
 -- TODO the groupXxx functions should not use 'union' but
 -- test if the previous+next parts are the same (and raise
@@ -229,7 +275,9 @@ groupMiddle [] = error "groupMiddle: empty list"
 groupMiddle (Middle ss' x s' k':pts) = go ss' s' k' pts
   where go ss s k [] = Middle ss x s k
         go ss s k (Middle ss2 _ s2 k2:xs)
-          | k == k2 = go (ss `union` ss2) (s `union` s2) k xs
+          | ss /= ss2 = error "groupMiddle: different prefix"
+        go ss s k (Middle _ _ s2 k2:xs)
+          | k == k2 = go ss (s `union` s2) k xs
         go _ _ _ _ = error "groupMiddle: ambiguous middle parts"
 groupMiddle _ = error "groupMiddle: not a Middle part"
 
@@ -241,11 +289,7 @@ groupMiddle _ = error "groupMiddle: not a Middle part"
 -- TODO x is assumed to be the same (idem for the other groupXxx functions).
 groupLast :: [Part] -> Part
 groupLast [] = error "groupLast: empty list"
-groupLast (Last a' s' x k':pts) = go a' s' k' pts
-  where go a s k [] = Last a s x k
-        go a s k (Last _ s2 _ _:xs)
-          = go a (s `union` s2) k xs
-        go _ _ _ _ = error "groupLast: not a Last part"
+groupLast [l@(Last _ _ _ _ _)] = l
 groupLast _ = error "groupLast: not a Last part"
 
 -- Parts
@@ -268,11 +312,11 @@ groupLast _ = error "groupLast: not a Last part"
 
 data Part = First (Maybe (Associativity,Precedence)) String [String] Kind
 -- assoc/prec if it is open, possible successor parts, non-empty, s-expr/distfix
-          | Last (Maybe (Associativity,Precedence)) [[String]] String Bool
--- assoc/prec if it is open, possible predecessor parts, non-empty, keep/discard
+          | Last (Maybe (Associativity,Precedence)) [String] String Bool Int
+-- assoc/prec if it is open, possible predecessor parts, non-empty, keep/discard, arity
           | Lone Opening Precedence String Bool
 -- opening, precedence, keep/discard
-          | Middle [[String]] String [String] Kind
+          | Middle [String] String [String] Kind
 -- possible predecessor and successor parts, both non-empty, s-expr/distfix
   deriving (Show, Eq)
 
@@ -285,7 +329,7 @@ isFirst (First _ _ _ _) = True
 isFirst _ = False
 
 isLast :: Part -> Bool
-isLast (Last _ _ _ _) = True
+isLast (Last _ _ _ _ _) = True
 isLast _ = False
 
 isMiddle :: Part -> Bool
@@ -299,20 +343,26 @@ begin _ = False
 
 end :: Part -> Bool
 end (Lone _ _ _ _) = True
-end (Last _ _ _ _) = True
+end (Last _ _ _ _ _) = True
 end _ = False
 
 discard :: Part -> Bool
 discard (First _ _ _ _) = False
-discard (Last _ _ _ keep) = not keep
+discard (Last _ _ _ keep _) = not keep
 discard (Lone _ _ _ keep) = not keep
 discard (Middle _ _ _ _) = False
 
 partSymbol :: Part -> String
 partSymbol (First _ s _ _) = s
-partSymbol (Last _ _ s _) = s
+partSymbol (Last _ _ s _ _) = s
 partSymbol (Lone _ _ s _) = s
 partSymbol (Middle _ s _ _) = s
+
+arity (First _ _ _ _) = error "arity: bad argument"
+arity (Middle _ _ _ _) = error "arity: bad argument"
+arity (Lone (BothOpen _) _ _ _) = 2
+arity (Lone _ _ _ _) = 1
+arity (Last _ p _ _ ar) = ar
 
 data Opening = LeftOpen Bool
              | RightOpen Bool
@@ -322,28 +372,28 @@ data Opening = LeftOpen Bool
 leftHole :: Part -> Bool
 leftHole (First (Just _) _ _ _) = True
 leftHole (First _ _ _ _) = False
-leftHole (Last _ _ _ _) = True
+leftHole (Last _ _ _ _ _) = True
 leftHole (Lone (RightOpen _) _ _ _) = False
 leftHole (Lone _ _ _ _) = True
 leftHole (Middle _ _ _ _) = True
 
 rightHole :: Part -> Bool
 rightHole (First _ _ _ _) = True
-rightHole (Last (Just _) _ _ _) = True
-rightHole (Last _ _ _ _) = False
+rightHole (Last (Just _) _ _ _ _) = True
+rightHole (Last _ _ _ _ _) = False
 rightHole (Lone (LeftOpen _) _ _ _) = False
 rightHole (Lone _ _ _ _) = True
 rightHole (Middle _ _ _ _) = True
 
 rightHoleKind :: Part -> Maybe Kind
 rightHoleKind (First _ _ _ k) = Just k
-rightHoleKind (Last _ _ _ _) = Nothing
+rightHoleKind (Last _ _ _ _ _) = Nothing
 rightHoleKind (Lone _ _ _ _) = Nothing
 rightHoleKind (Middle _ _ _ k) = Just k
 
 associativity :: Part -> Maybe (Associativity,Precedence)
 associativity (First ap _ _ _) = ap
-associativity (Last ap _ _ _) = ap
+associativity (Last ap _ _ _ _) = ap
 associativity (Lone (LeftOpen a) p _ _) = Just (a',p)
   where a' = if a then LeftAssociative else NonAssociative
 associativity (Lone (RightOpen a) p _ _) = Just (a',p)
@@ -353,18 +403,21 @@ associativity (Middle _ _ _ _) = Nothing
 
 nextPart :: Part -> [String]
 nextPart (First _ _ r _) = r
-nextPart (Last _ _ _ _) = []
+nextPart (Last _ _ _ _ _) = []
 nextPart (Lone _ _ _ _) = []
 nextPart (Middle _ _ r _) = r
 
-previousPart :: Part -> [[String]]
+previousPart :: Part -> [String]
 previousPart (First _ _ _ _) = []
-previousPart (Last _ l _ _) = l
+previousPart (Last _ l _ _ _) = l
 previousPart (Lone _ _ _ _) = []
 previousPart (Middle l _ _ _) = l
 
 continue :: String -> Part -> Bool
 continue t p = t `elem` nextPart p
+
+continue' :: Part -> Part -> Bool
+continue' x y = previousPart x == previousPart y ++ [partSymbol y]
 
 part :: String -> Op -> [Part]
 part s o = filter ((==s) . partSymbol) $ cut o
@@ -379,14 +432,14 @@ cut (Op1 keep x [] opening _ p) =
 cut (Op1 _ x xs opening a p) =
   First ma x [snd $ head xs] (fst $ head xs) :
   map f (zip4 ls ss rs ks) ++
-  [Last mb [x:(map snd $ init xs)] (snd $ last xs) True]
+  [Last mb (x:(map snd $ init xs)) (snd $ last xs) True ar]
   where
     j = Just (a,p)
-    (ma,mb) = case opening of
-      LeftOpen _ -> (j, Nothing)
-      BothOpen _ -> (j, j)
-      RightOpen _ -> (Nothing, j)
-    f (l, s, r, k) = Middle [l] s r k
+    (ma,mb,ar) = case opening of
+      LeftOpen _ -> (j, Nothing, length xs + 1)
+      BothOpen _ -> (j, j, length xs + 2)
+      RightOpen _ -> (Nothing, j, length xs + 1)
+    f (l, s, r, k) = Middle l s r k
     (_, xs') = holesAfter (init xs) (fst $ last xs)
     fxs = inits $ map fst xs'
     sxs = inits $ map snd xs'
@@ -396,13 +449,13 @@ cut (Op1 _ x xs opening a p) =
     ks = map head (tail sxs)
 
 cut (Op2 keep x [] h y) =
-  [First Nothing x [y] h, Last Nothing [[x]] y keep]
+  [First Nothing x [y] h, Last Nothing [x] y keep 1]
 cut (Op2 keep x xs h y) =
   First Nothing x [snd $ head xs] h :
   map f (zip4 ls ss rs ks) ++
-  [Last Nothing [x:map snd xs] y keep]
+  [Last Nothing (x:map snd xs) y keep ar]
   where
-    f (l, s, r, k) = Middle [l] s r k
+    f (l, s, r, k) = Middle l s r k
     (_, xs') = holesAfter xs h
     fxs = inits $ map fst xs'
     sxs = inits $ map snd xs'
@@ -410,6 +463,7 @@ cut (Op2 keep x xs h y) =
     ss = map head (tail fxs)
     rs = map ((++[y]) . tail) (tail fxs)
     ks = map head (tail sxs)
+    ar = length xs + 1
 
 -- Takes a list of pair (hole,string) and returns
 -- a list of (string,hole) where the ordre and interleaving
@@ -419,4 +473,10 @@ holesAfter :: [(Kind,String)] -> Kind -> (Kind, [(String,Kind)])
 holesAfter [] h = (h, [])
 holesAfter [(a,b)] h = (a, [(b,h)])
 holesAfter ((a,b):xs@((c,_):_)) h = (a, (b,c) : snd (holesAfter xs h))
+
+-- TODO here and for groupXxx, make distinct data type for Lone, First, Middle and Last)
+-- partMap :: Table -> (M.Map String Part, M.Map String Part, M.Map String Part, M.Map String Part)
+-- partMap (Table ops) =
+--  where
+--    (lones, fs, ms, ls) = filterParts $ concatMap cut ops
 

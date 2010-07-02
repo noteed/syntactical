@@ -126,10 +126,9 @@ shunt table ts = case fix $ initial ts of
 step :: Table -> Shunt -> Shunt
 
 step table (S tt (s@(Op y):ss) oo@(os:oss) _) |
-  let Just pt2 = findPart' table y
-  in end pt2 && (not $ rightHole pt2)
-  = case findPart' table y of
-  Just pt2 | discard pt2 ->
+  end y && (not $ rightHole y)
+  = case y of
+   _ | discard y ->
     let (o:os') = os in S (o:tt) ss (os':oss) MatchedR
      | otherwise ->
     let ((o:os'):oss') = apply table s oo in S (o:tt) ss (os':oss') MatchedR
@@ -140,10 +139,10 @@ step table (S tt (s@(Op y):ss) oo@(os:oss) _) |
 step table sh@(S tt@(t@(Num b):ts) st oo@(os:oss) _) = case sh of
   S _ (Sym _:_)  ((Num _:_):_) _     -> S ts st ((t:os):oss) Inert
   S _ (Node _:_) ((Num _:_):_) _     -> S ts st ((t:os):oss) Inert
-  S _ (Op y:_)   ((Num a:_):_) Inert -> case findPart' table y of
-    Just pt2 | rightHoleKind pt2 == Just SExpression ->
+  S _ (Op y:_)   ((Num a:_):_) Inert
+    | rightHoleKind y == Just SExpression ->
       S ts st ((t:os):oss) Inert
-         | otherwise ->
+    | otherwise ->
       S tt st oo (failure $ CantApply a b)
   S _ _          ((Num a:_):_) Inert -> S tt st oo (failure $ CantApply a b)
   _                                  -> S ts st ((t:os):oss) Inert
@@ -151,10 +150,10 @@ step table sh@(S tt@(t@(Num b):ts) st oo@(os:oss) _) = case sh of
 -- An applicator is on the input stack.
 step table (S (t:ts) st@(s:_) oo@(os:oss) _)
   | applicator table t = case s of
-  Op y -> case findPart' table y of
-    Just pt2 | rightHoleKind pt2 == Just SExpression ->
+  Op y
+    | rightHoleKind y == Just SExpression ->
       S ts st ((t:os):oss) SExpr
-         | otherwise ->
+    | otherwise ->
       S ts (t:st) ([]:oo) StackApp
   Sym _                        -> S ts st ((t:os):oss) Inert
   Node _                       -> S ts st ((t:os):oss) Inert
@@ -163,84 +162,86 @@ step table (S (t:ts) st@(s:_) oo@(os:oss) _)
 -- An operator part is on the input stack and an applicator is on
 -- the stack.
 step table (S tt@((Sym x):ts) st@(s:ss) oo _)
-  | applicator table s = let (pt1, Nothing) = findBoth table x st in go pt1
-  where
-    go pt1
-      | begin pt1 && not (leftHole pt1) && rightHoleKind pt1 == Just SExpression =
-      S ts (Op [x]:st) ([]:oo) StackL
-      | begin pt1 && not (leftHole pt1) =
-      S ts (Op [x]:st) oo StackL
-      | otherwise =
+  | applicator table s = case findBoth table x st of
+    (Right (Begin pt1), Nothing)
+      | begin pt1 && not (leftHole pt1) && rightHoleKind pt1 == Just SExpression ->
+      S ts (Op pt1:st) ([]:oo) StackL
+      | begin pt1 && not (leftHole pt1) ->
+      S ts (Op pt1:st) oo StackL
+    (_, Nothing) ->
       S tt ss (apply table s oo) FlushApp
 
 -- An operator part is on the input stack and on the stack.
 step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
-  let (pt1, Just pt2) = findBoth table x st in go pt1 pt2 -- findParts table x y in go pt1 pt2
+--  let (Left pt1, Just pt2) = findBoth table x st in go pt1 pt2
+  case findBoth table x st of
+    (Left pt1, Just pt2) -> go pt1 pt2
+    (Right (Begin pt1), Just pt2) -> go pt1 pt2
+    (Right (MissingBegin ps), Just pt2) ->
+      S tt st oo (failure $ Incomplete $ head ps)
+
   where
     go pt1 pt2
       | rightHoleKind pt1 == Just Distfix && rightHoleKind pt2 == Just SExpression =
-      S ts (Op [x]:st) oo StackL
+      S ts (Op pt1:st) oo StackL
       | rightHoleKind pt1 == Just SExpression =
-      S ts (Op [x]:st) ([]:oo) StackL
+      S ts (Op pt1:st) ([]:oo) StackL
 
       | rightHoleKind pt2 == Just SExpression =
       if x `continue` pt2
       then let (os':h:oss') = oo
                ap = Node (reverse os')
            in if stackedOp ru
-              then S (Sym (concat $ y++[x]):ts) ss (h:oss') MakeInert -- build the () symbol
-              else S ts (Op (y++[x]):ss) ((ap:h):oss') MatchedR
+              then S (Sym (concat $ previousPart pt1++[x]):ts) ss (h:oss') MakeInert -- build the () symbol
+              else S ts (Op pt1:ss) ((ap:h):oss') MatchedR
       else S ts st ((t:os):oss) SExpr
 
-      | not (begin pt1) && not (end  pt2) && not (x `continue` pt2) =
-      S tt st oo (failure $ Incomplete y)
-
       | rightHole pt2 && leftHole pt1 && stackedOp ru =
-      S tt st oo (failure $ EmptyHole (last y) x)
+      S tt st oo (failure $ EmptyHole (partSymbol y) x)
 
-      | x `continue` pt2 = S ts (Op (y++[x]):ss) oo ContinueOp
+      | pt1 `continue'` pt2 = S ts (Op pt1:ss) oo ContinueOp
 
-      | not (leftHole pt1) && begin pt1 = S ts (Op [x]:st) oo StackL
+      | not (leftHole pt1) && begin pt1 = S ts (Op pt1:st) oo StackL
 
       | pt1 `lower` pt2 = S tt ss (apply table s oo) FlushOp
 
-      | otherwise = S ts (Op [x]:st) oo StackOp
+      | otherwise = S ts (Op pt1:st) oo StackOp
 
 -- No more tokens on the input stack, just have to flush
 -- the remaining applicators and/or operators.
 step table sh@(S [] (s:ss) oo _) = case s of
   Sym _              -> S [] ss (apply table s oo) FlushApp
   Node _             -> S [] ss (apply table s oo) FlushApp
-  Op y | end . fromJust $ findPart' table y ->
+  Op y | end y ->
     -- The infix or prefix operator has all its parts.
     -- The postfix/closed is handled in the first equation.
     S [] ss (apply table s oo) FlushOp
        | otherwise ->
     -- The operator is not complete.
-    sh { rule = failure $ nextPart (fromJust $ findPart' table y) `MissingAfter` y }
+    sh { rule = failure $ nextPart y `MissingAfter` [partSymbol y] }
   Num _ -> error "can't happen: but TODO make a specific data type for the op stack"
 
 -- The applicator/operator stack is empty.
 step table sh@(S (t:ts) [] oo ru) = case t of
   Node _ -> S ts [t] ([]:oo) StackApp
-  Sym x -> case findPart table x of
-    Nothing   -> S ts [t] ([]:oo) StackApp
+  Sym x -> case findBegin table x of
+    NoBegin   -> S ts [t] ([]:oo) StackApp
     -- x is the first sub-op, and the stack is empty
-    Just pt1 -> go x pt1
+    Begin pt1 -> go x pt1
+    MissingBegin xs ->
+      sh { rule = failure $ xs `MissingBefore` x }
   Num _ -> error "can't happen: Num is handled in a previous equation"
   Op _ -> error "can't happen: but TODO make a specifi data type for the input stack"
   where
     go x pt1
-      | begin pt1 && leftHole pt1 && ru == Initial =
+      | leftHole pt1 && ru == Initial =
       error $ "missing sub-expression before " ++ x
-      | begin pt1 && leftHole pt1 =
-      S ts [Op [x]] oo StackOp
-      | begin pt1 && rightHoleKind pt1 == Just SExpression =
-      S ts [Op [x]] ([]:oo) StackL
-      | begin pt1 =
-      S ts [Op [x]] oo StackL
+      | leftHole pt1 =
+      S ts [Op pt1] oo StackOp
+      | rightHoleKind pt1 == Just SExpression =
+      S ts [Op pt1] ([]:oo) StackL
       | otherwise =
-      sh { rule = failure $ previousPart pt1 `MissingBefore` x }
+      S ts [Op pt1] oo StackL
 
 -- Everything is done and fine.
 step _ sh@(S [] [] [[_]] _) = sh { rule = Done Success }
@@ -255,11 +256,7 @@ apply table s@(Op y) (os:oss) =
   -- so hitting this point should be a bug.
   then error $ "not enough arguments supplied to " ++ show y
   else (Node (s:reverse l) : r) : oss
-  where nargs = case findOps y table of
-          [Op1 _ _ xs (BothOpen _) _ _] -> length xs + 2
-          [Op2 _ _ xs _ _] -> length xs + 1
-          [_] -> length y
-          _ -> error $ "bug: wrong use of apply: " ++ show y
+  where nargs = arity y
         (l,r) = splitAt nargs os
 apply _ s@(Sym _) (os:h:oss) =  (ap:h):oss
   where ap = if null os then s else Node (s:reverse os)
