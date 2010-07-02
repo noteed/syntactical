@@ -6,14 +6,10 @@
 -- blanks between arguments).
 -- TODO make sure the rules reflect what's going on, a same
 -- rule should be associated to a same behavior.
--- (TODO a pre/postfix operator can be associative or non-associative.)
 -- TODO factorize
 -- TODO is ! a + b allowed if ! and + have the same precedence?
 -- TODO allow specific operator table for internal operator holes
 -- (e.g. to reuse a same symbol with different fixity/precedecence).
--- TODO replace the use of (head . findOp).
--- TODO test more infix ops before a postfix (e.g. a + b * c _/ d /.)
--- to exercice flushHigher.
 -- TODO use HPC to see if tests cover the code.
 -- TODO maybe feed random tokens to the algorithm to see if it can crash.
 -- TODO use hlint.
@@ -65,9 +61,8 @@ data Failure =
   deriving (Eq, Show)
 
 isDone :: Shunt -> Bool
-isDone sh = case rule sh of
-  Done _ -> True
-  _ -> False
+isDone (S _ _ _ (Done _)) = True
+isDone _ = False
 
 showFailure :: Failure -> String
 showFailure f = case f of
@@ -90,12 +85,14 @@ stackedOp StackOp = True
 stackedOp ContinueOp = True
 stackedOp _ = False
 
-data Shunt = S {
-    input :: [Tree]    -- list of tokens (Nodes can be pushed back.)
-  , stack :: [Tree]    -- stack of operators and applicators
-  , output :: [[Tree]] -- stack of stacks
-  , rule :: Rule
-  }
+data Shunt = S
+  [Tree]   -- list of tokens (Nodes can be pushed back.)
+  [Tree]   -- stack of operators and applicators
+  [[Tree]] -- stack of stacks
+  Rule
+
+rule :: Shunt -> Rule -> Shunt
+rule (S tt st oo _) ru = S tt st oo ru
 
 instance Show Shunt where
   show (S ts ss os ru) =
@@ -124,13 +121,11 @@ shunt table ts = case fix $ initial ts of
 
 step :: Table -> Shunt -> Shunt
 
-step _ (S tt (s@(Op y):ss) oo@(os:oss) _) |
-  end y && (not $ rightHole y)
-  = case y of
-   _ | discard y ->
-    let (o:os') = os in S (o:tt) ss (os':oss) MatchedR
-     | otherwise ->
-    let ((o:os'):oss') = apply s oo in S (o:tt) ss (os':oss') MatchedR
+-- There is a complete Closed or Postifx operator on the top of the stack.
+step _ (S tt (s@(Op y):ss) oo@(os:oss) _) | end y && (not $ rightHole y)
+  = if discard y
+  then let (o:os') = os in S (o:tt) ss (os':oss) MatchedR
+  else let ((o:os'):oss') = apply s oo in S (o:tt) ss (os':oss') MatchedR
 
 -- A number is on the input stack. It goes straight
 -- to the output unless we would end up trying to apply
@@ -161,32 +156,33 @@ step table (S (t:ts) st@(s:_) oo@(os:oss) _)
 -- An operator part is on the input stack and an applicator is on
 -- the stack.
 step table (S tt@((Sym x):ts) st@(s:ss) oo _)
-  | applicator table s = case findBoth table x st of
-    (Right (Begin pt1), Nothing)
-      | begin pt1 && not (leftHole pt1) && rightHoleKind pt1 == Just SExpression ->
+  | applicator table s =
+  case findBoth table x st of
+    Right (Begin pt1)
+      | not (leftHole pt1) && rightHoleKind pt1 == Just SExpression ->
       S ts (Op pt1:st) ([]:oo) StackL
-      | begin pt1 && not (leftHole pt1) ->
+      | not (leftHole pt1) ->
       S ts (Op pt1:st) oo StackL
-    (_, Nothing) ->
+    _ ->
       S tt ss (apply s oo) FlushApp
 
 -- An operator part is on the input stack and on the stack.
 step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
   case findBoth table x st of
-    (Left pt1, Just pt2) -> go pt1 pt2
-    (Right (Begin pt1), Just pt2) -> go pt1 pt2
-    (Right (MissingBegin ps), Just _) ->
+    Left pt1 -> go pt1
+    Right (Begin pt1) -> go pt1
+    Right (MissingBegin ps) ->
       S tt st oo (failure $ Incomplete $ head ps)
-
+    Right NoBegin -> error "can't happen" -- x is in the table for sure
   where
-    go pt1 pt2
-      | rightHoleKind pt1 == Just Distfix && rightHoleKind pt2 == Just SExpression =
+    go pt1
+      | rightHoleKind pt1 == Just Distfix && rightHoleKind y == Just SExpression =
       S ts (Op pt1:st) oo StackL
       | rightHoleKind pt1 == Just SExpression =
       S ts (Op pt1:st) ([]:oo) StackL
 
-      | rightHoleKind pt2 == Just SExpression =
-      if pt1 `continue` pt2
+      | rightHoleKind y == Just SExpression =
+      if pt1 `continue` y
       then let (os':h:oss') = oo
                ap = Node (reverse os')
            in if stackedOp ru
@@ -194,14 +190,14 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
               else S ts (Op pt1:ss) ((ap:h):oss') MatchedR
       else S ts st ((t:os):oss) SExpr
 
-      | rightHole pt2 && leftHole pt1 && stackedOp ru =
+      | rightHole y && leftHole pt1 && stackedOp ru =
       S tt st oo (failure $ EmptyHole (partSymbol y) x)
 
-      | pt1 `continue` pt2 = S ts (Op pt1:ss) oo ContinueOp
+      | pt1 `continue` y = S ts (Op pt1:ss) oo ContinueOp
 
       | not (leftHole pt1) && begin pt1 = S ts (Op pt1:st) oo StackL
 
-      | pt1 `lower` pt2 = S tt ss (apply s oo) FlushOp
+      | pt1 `lower` y = S tt ss (apply s oo) FlushOp
 
       | otherwise = S ts (Op pt1:st) oo StackOp
 
@@ -216,7 +212,7 @@ step _ sh@(S [] (s:ss) oo _) = case s of
     S [] ss (apply s oo) FlushOp
        | otherwise ->
     -- The operator is not complete.
-    sh { rule = failure $ nextPart y `MissingAfter` [partSymbol y] }
+    rule sh $ failure $ nextPart y `MissingAfter` [partSymbol y]
   Num _ -> error "can't happen: but TODO make a specific data type for the op stack"
 
 -- The applicator/operator stack is empty.
@@ -227,7 +223,7 @@ step table sh@(S (t:ts) [] oo ru) = case t of
     -- x is the first sub-op, and the stack is empty
     Begin pt1 -> go x pt1
     MissingBegin xs ->
-      sh { rule = failure $ xs `MissingBefore` x }
+      rule sh $ failure $ xs `MissingBefore` x
   Num _ -> error "can't happen: Num is handled in a previous equation"
   Op _ -> error "can't happen: but TODO make a specifi data type for the input stack"
   where
@@ -242,10 +238,10 @@ step table sh@(S (t:ts) [] oo ru) = case t of
       S ts [Op pt1] oo StackL
 
 -- Everything is done and fine.
-step _ sh@(S [] [] [[_]] _) = sh { rule = Done Success }
+step _ sh@(S [] [] [[_]] _) = rule sh $ Done Success
 
 -- This equation should never be reached; otherwise it is a bug.
-step _ sh = sh { rule = failure Unexpected }
+step _ sh = rule sh $ failure Unexpected
 
 apply :: Tree -> [[Tree]] -> [[Tree]]
 apply s@(Op y) (os:oss) =

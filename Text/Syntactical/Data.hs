@@ -129,10 +129,7 @@ findContinuing table x y =
 -- (i.e. on the left of an innner hole).
 findIncompletePart :: Table -> [Tree] -> Maybe Part
 findIncompletePart _ [] = Nothing
-findIncompletePart table (Op y:ss) =
-  if (not . end) y
-  then Just y
-  else findIncompletePart table ss
+findIncompletePart _ (Op y:_) | not (end y) = Just y
 findIncompletePart table (_:ss) = findIncompletePart table ss
 
 -- - The operator doesn't contain any operator
@@ -150,23 +147,21 @@ findIncompletePart table (_:ss) = findIncompletePart table ss
 -- find, even if it is not First; one of the rules will
 -- generate a MissingBefore (in the [] case) or an Incomplete
 -- (in the pts2 case).
-findBoth :: Table -> String -> [Tree] -> (Either Part FindBegin, Maybe Part)
+findBoth :: Table -> String -> [Tree] -> Either Part FindBegin
 findBoth table x st = case findIncompletePart table st of
-  Nothing -> (Right $ findBegin table x, b)
+  Nothing -> Right $ findBegin table x
   Just y' -> case findContinuing table x y' of
-    Just a -> (Left a, if Op y' == head st then Just y' else b)
-    Nothing -> (Right $ findBegin table x, b)
-  where
-    b = case st of
-      (Op y:_) -> Just y
-      _ -> Nothing
+    Just a -> Left a
+    Nothing -> Right $ findBegin table x
 
 filterParts :: [Part] -> ([Part],[Part],[Part],[Part])
 filterParts pts = (filter isLone pts, filter isFirst pts,
   filter isMiddle pts, filter isLast pts)
 
+-- NoBegin: no parts with the requested symbol.
+-- Begin: found a begin part.
+-- MissingBegin: no begin part found but continuing part found.
 data FindBegin = NoBegin | Begin Part | MissingBegin [[String]]
---ContinueTop | ContinueBelow | Begin | Mismatch
 
 findBegin :: Table -> String -> FindBegin
 findBegin table x = case filterParts $ findOp' table x of
@@ -176,19 +171,6 @@ findBegin table x = case filterParts $ findOp' table x of
   (l@(_:_),_,_,_) -> Begin $ groupLone l
   (_,f@(_:_),_,_) -> Begin $ groupFirst f
   (_,_,m,l) -> MissingBegin $ map previousPart (m++l)
-
-allParts :: Table -> [Part]
-allParts (Table ops) = concatMap cut ops
-
-matchCurrent :: String -> [Part] -> [Part]
-matchCurrent x pts = filter ((==x) .partSymbol) pts
-
-matchPrevious :: [String] -> [Part] -> [Part]
-matchPrevious y pts = filter ((==y) . previousPart) pts
-
--- TODO the groupXxx functions should not use 'union' but
--- test if the previous+next parts are the same (and raise
--- an erro if it is the case).
 
 groupLone :: [Part] -> Part
 groupLone [pt] = pt
@@ -204,7 +186,6 @@ groupFirst (First a' x s' k':pts) = go a' s' k' pts
         go _ _ _ _ = error "groupFirst: ambiguous first parts"
 groupFirst _ = error "groupFirst: not a First part"
 
--- TODO k == k2 is necessary only when the prefix is the same
 groupMiddle :: [Part] -> Part
 groupMiddle [] = error "groupMiddle: empty list"
 groupMiddle (Middle ss' x s' k':pts) = go ss' s' k' pts
@@ -215,12 +196,6 @@ groupMiddle (Middle ss' x s' k':pts) = go ss' s' k' pts
         go _ _ _ _ = error "groupMiddle: ambiguous middle parts"
 groupMiddle _ = error "groupMiddle: not a Middle part"
 
--- This is needed only to return something so that the
--- shunt can complain about missing parts before this one.
--- Thus, the associativity and keep values do not matter.
--- (In other words, this is used for the union of the previous
--- parts.)
--- TODO x is assumed to be the same (idem for the other groupXxx functions).
 groupLast :: [Part] -> Part
 groupLast [] = error "groupLast: empty list"
 groupLast [l@(Last _ _ _ _ _)] = l
