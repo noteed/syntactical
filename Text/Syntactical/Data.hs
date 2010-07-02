@@ -162,7 +162,8 @@ findBegin :: Table -> String -> FindBegin
 findBegin table x = case filterParts $ findParts table x of
   ([],[],[],[]) -> NoBegin
   ((_:_),(_:_),_,_) -> error "findBegin: ambiguous: lone or first part"
-  (_,_,(_:_),(_:_)) -> error "findBegin: ambiguous: middle or last part"
+  -- TODO the ambiguity is present when they share the same prefix
+  --(_,_,(_:_),(_:_)) -> error "findBegin: ambiguous: middle or last part"
   (l@(_:_),_,_,_) -> Begin $ groupLone l
   (_,f@(_:_),_,_) -> Begin $ groupFirst f
   (_,_,m,l) -> MissingBegin $ map previousPart (m++l)

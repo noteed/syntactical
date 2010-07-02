@@ -13,6 +13,8 @@ table = buildTable
    , Op2 True "[" [(Distfix, "|")] Distfix "]"
    , Op2 True "[" [(Distfix, "|"),(Distfix, "|")] Distfix "]"
    , Op2 True "[." [(Distfix, "|")] Distfix "]"
+   , Op2 True "</" [(Distfix, "|")] Distfix "/>"
+   , Op2 True "|" [] Distfix "|"
    ]
  ]
 
@@ -53,6 +55,11 @@ tests =
   , ("[ a | b ]", "⟨[|] a b⟩")
   , ("[ a | b | c ]", "⟨[||] a b c⟩")
   , ("[. a | b ]", "⟨[.|] a b⟩")
+
+  , ("</ a | b />", "⟨</|/> a b⟩")
+
+  , ("| a |", "⟨|| a⟩")
+  , ("[ (| a |) ]", "⟨[] ⟨|| a⟩⟩")
 
   , ("⟨⟩", "⟨⟩")
   , ("⟨⟩ a", "⟨⟨⟩ a⟩")
