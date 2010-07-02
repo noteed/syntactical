@@ -1,5 +1,5 @@
 module Text.Syntactical.Data (
-  Tree(..), Op(..), Opening(..), Associativity(..), Kind(..), Table(..),
+  Tree(..), Op(..), Opening(..), Associativity(..), Kind(..), Table,
   infx, prefx, postfx, closed, closed_,
   buildTable,
   begin, end, leftHole, rightHole, rightHoleKind, discard,
@@ -49,7 +49,7 @@ data Associativity = NonAssociative | LeftAssociative | RightAssociative
 
 type Precedence = Int
 
-newtype Table = Table [Op]
+newtype Table = Table [Part]
 
 infx :: String -> [String] -> Associativity -> Op
 -- TODO the associativity is present twice
@@ -79,7 +79,7 @@ setPrecedence _ c = c
 buildTable :: [[Op]] -> Table
 buildTable ls = Table . concat $ zipWith f ls [n, n - 1 .. 0]
   where n = length ls
-        f l p = map (setPrecedence p) l
+        f l p = concatMap (cut . setPrecedence p) l
 
 instance Show Tree where
   show = display
@@ -105,25 +105,19 @@ lower pt1 pt2 = case (associativity pt1, associativity pt2) of
           | a1 == NonAssociative && p1 <= p2 = True
           | otherwise = False
 
-findOp' :: Table -> String -> [Part]
-findOp' (Table []) _ = []
-findOp' (Table (o:os)) op =
-  if op `elem` parts o
-  then part op o ++ findOp' (Table os) op
-  else findOp' (Table os) op
+findParts :: Table -> String -> [Part]
+findParts (Table ps) x = filter ((==x) . partSymbol) ps
 
 applicator :: Table -> Tree -> Bool
-applicator table (Sym x) = findOp' table x == []
+applicator table (Sym x) = findParts table x == []
 applicator _ (Node _) = True
 applicator _ _ = False
 
-findContinuing :: Table -> String -> Part -> Maybe Part
-findContinuing table x y =
-  case as of
-    [] -> Nothing
-    _ -> Just $ if isLast (head as) then groupLast as else groupMiddle as
-  where xs = findOp' table x
-        as = [a | a <- xs, a `continue` y]
+findContinuing :: [Part] -> Part -> Maybe Part
+findContinuing xs y = case as of
+  [] -> Nothing
+  (a:_) -> Just $ if isLast a then groupLast as else groupMiddle as
+  where as = filter (`continue` y) xs
 
 -- Search the operator stack for the top-most parts waiting to be completed
 -- (i.e. on the left of an innner hole).
@@ -150,9 +144,10 @@ findIncompletePart table (_:ss) = findIncompletePart table ss
 findBoth :: Table -> String -> [Tree] -> Either Part FindBegin
 findBoth table x st = case findIncompletePart table st of
   Nothing -> Right $ findBegin table x
-  Just y' -> case findContinuing table x y' of
+  Just y -> case findContinuing xs y of
     Just a -> Left a
     Nothing -> Right $ findBegin table x
+  where xs = findParts table x
 
 filterParts :: [Part] -> ([Part],[Part],[Part],[Part])
 filterParts pts = (filter isLone pts, filter isFirst pts,
@@ -164,7 +159,7 @@ filterParts pts = (filter isLone pts, filter isFirst pts,
 data FindBegin = NoBegin | Begin Part | MissingBegin [[String]]
 
 findBegin :: Table -> String -> FindBegin
-findBegin table x = case filterParts $ findOp' table x of
+findBegin table x = case filterParts $ findParts table x of
   ([],[],[],[]) -> NoBegin
   ((_:_),(_:_),_,_) -> error "findBegin: ambiguous: lone or first part"
   (_,_,(_:_),(_:_)) -> error "findBegin: ambiguous: middle or last part"
@@ -325,13 +320,6 @@ previousPart (Middle l _ _ _) = l
 
 continue :: Part -> Part -> Bool
 continue x y = previousPart x == previousPart y ++ [partSymbol y]
-
-part :: String -> Op -> [Part]
-part s o = filter ((==s) . partSymbol) $ cut o
-
-parts :: Op -> [String]
-parts (Op1 _ x xs _ _ _) = x : map snd xs
-parts (Op2 _ x xs _ y) = x : map snd xs ++ [y]
 
 cut :: Op -> [Part]
 cut (Op1 keep x [] opening _ p) =

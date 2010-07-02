@@ -21,7 +21,13 @@ module Text.Syntactical.Yard
 
 import Data.List (intersperse)
 
-import Text.Syntactical.Data
+import Text.Syntactical.Data (
+  Tree(..), Op(..), Kind(..), Table,
+  begin, end, leftHole, rightHole, rightHoleKind, discard,
+  applicator, continue, lower,
+  arity, partSymbol, nextPart, previousPart,
+  findBoth, findBegin, FindBegin(..)
+  )
 
 -- An applicator is a non-operator symbol that is applied
 -- to some arguments. When such a symbol is read, it is
