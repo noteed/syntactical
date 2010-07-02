@@ -1,9 +1,8 @@
--- 2009.05.05
--- 2009.06.08
--- 2010.05.01
--- The Shunting-Yard algorithm (modified to allow function
--- application without parens around the arguments, and just
--- blanks between arguments).
+-- |
+-- The modified Shunting-Yard algorithm. The modifications allow function
+-- application by juxtaposition (without any paren around the arguments)
+-- and distfix operators.
+
 -- TODO make sure the rules reflect what's going on, a same
 -- rule should be associated to a same behavior.
 -- TODO factorize
@@ -16,7 +15,7 @@
 -- TODO write more realistic example (for a Haskell-like syntax)
 
 module Text.Syntactical.Yard
-  ( shunt, steps, Result(..), Failure(..), showFailure
+  ( shunt, steps, Failure(..), showFailure
   ) where
 
 import Data.List (intersperse)
@@ -56,6 +55,9 @@ data Result =
   | Failure Failure
   deriving (Eq, Show)
 
+-- | The different failure cases the 'shunt' function can return.
+-- The 'showFailure' function can be used to give them a textual
+-- representation.
 data Failure =
     MissingBefore [[String]] String -- error case: missing parts before part
   | MissingAfter [String] [String]  -- error case: missing part after parts
@@ -70,6 +72,7 @@ isDone :: Shunt -> Bool
 isDone (S _ _ _ (Done _)) = True
 isDone _ = False
 
+-- | Give a textual representation of a 'Failure'.
 showFailure :: Failure -> String
 showFailure f = case f of
   MissingAfter p ps -> "Parse error: missing operator part " ++
@@ -107,6 +110,8 @@ instance Show Shunt where
 pad :: Show a => Int -> a -> [Char]
 pad n s = let s' = show s in replicate (n - length s') ' ' ++ s'
 
+-- | Similar to the 'shunt' function but print the steps
+-- performed by the modified shunting yard algorithm.
 steps :: Table -> [Tree] -> IO ()
 steps table ts = do
   putStrLn $ "               Input               Stack              Output   Rule"
@@ -117,6 +122,7 @@ steps table ts = do
 initial :: [Tree] -> Shunt
 initial ts = S ts [] [[]] Initial
 
+-- | Parse a list of tokens according to an operator table.
 shunt :: Table -> [Tree] -> Either Failure Tree
 shunt table ts = case fix $ initial ts of
   S [] [] [[o']] (Done Success) -> Right o'
