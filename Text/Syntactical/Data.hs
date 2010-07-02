@@ -1,18 +1,15 @@
 module Text.Syntactical.Data (
   Tree(..), Op(..), Opening(..), Associativity(..), Kind(..), Table(..),
-  findBegin, FindBegin(..),
   infx, prefx, postfx, closed, closed_,
   buildTable,
-  arity, partSymbol,
   begin, end, leftHole, rightHole, rightHoleKind, discard,
-  applicator, continue, continue', lower,
-  nextPart, previousPart,
-  findBoth, findOps, findPart, findPart'
+  applicator, continue, lower,
+  arity, partSymbol, nextPart, previousPart,
+  findBoth, findBegin, FindBegin(..)
   ) where
 
 import Data.List
-import Data.Maybe (fromJust)
-import qualified Data.Map as M
+--import qualified Data.Map as M
 
 data Tree = Node [Tree]
 -- The to-be-shunted tokens. Only the information for the
@@ -108,77 +105,12 @@ lower pt1 pt2 = case (associativity pt1, associativity pt2) of
           | a1 == NonAssociative && p1 <= p2 = True
           | otherwise = False
 
--- Returns a begin part in priority.
--- TODO findPart is used to find a begin part;
--- if it can't find it, it is an error and it
--- should make available the previous parts needed.
-findPart :: Table -> String -> Maybe Part
-findPart table x = case filterParts $ findOp' table x of
-  ([],[],[],[]) -> Nothing
-  ((_:_),(_:_),_,_) -> error "findPart: ambiguous: lone or first part"
-  (_,_,(_:_),(_:_)) -> error "findPart: ambiguous: middle or last part"
-  (l@(_:_),_,_,_) -> Just $ groupLone l
-  (_,f@(_:_),_,_) -> Just $ groupFirst f
-  (_,_,m@(_:_),_) -> Just $ groupMiddle m
-  (_,_,_,l@(_:_)) -> Just $ groupLast l
-
-findLone table x = if null ls
-  then Nothing
-  else Just $ groupLone ls
-  where
-  (ls,_,_,_) = filterParts $ findOp' table x
-
-findFirst table x = if null fs
-  then Nothing
-  else Just $ groupFirst fs
-  where
-  (_,fs,_,_) = filterParts $ findOp' table x
-
-findMiddle table x = if null ms
-  then Nothing
-  else Just $ groupMiddle ms
-  where
-  (_,_,ms,_) = filterParts $ findOp' table x
-
-findLast table x = if null ls
-  then Nothing
-  else Just $ groupLast ls
-  where
-  (_,_,_,ls) = filterParts $ findOp' table x
-
 findOp' :: Table -> String -> [Part]
 findOp' (Table []) _ = []
 findOp' (Table (o:os)) op =
   if op `elem` parts o
   then part op o ++ findOp' (Table os) op
   else findOp' (Table os) op
-
-findPart' :: Table -> [String] -> Maybe Part
-findPart' table xs = case filterParts $ findPart'' table xs of
-  ([],[],[],[]) -> Nothing
-  ((_:_),(_:_),_,_) -> error "findPart: ambiguous: lone or first part"
-  (_,_,(_:_),(_:_)) -> error "findPart: ambiguous: middle or last part"
-  (l@(_:_),_,_,_) -> Just $ groupLone l
-  (_,f@(_:_),_,_) -> Just $ groupFirst f
-  (_,_,m@(_:_),_) -> Just $ groupMiddle m
-  (_,_,_,l@(_:_)) -> Just $ groupLast l
-
-findPart'' :: Table -> [String] -> [Part]
-findPart'' (Table []) _ = []
-findPart'' (Table (o:os)) xs =
-  if xs `isPrefixOf` parts o
-  then part (last xs) o ++ findPart'' (Table os) xs
-  else findPart'' (Table os) xs
-
-findOps :: [String] -> Table -> [Op]
-findOps ops (Table t) = findOps' ops t
-
-findOps' :: [String] -> [Op] -> [Op]
-findOps' _ [] = []
-findOps' ops (o:os) =
-  if ops `isPrefixOf` parts o
-  then o : findOps' ops os
-  else findOps' ops os
 
 applicator :: Table -> Tree -> Bool
 applicator table (Sym x) = findOp' table x == []
@@ -191,7 +123,7 @@ findContinuing table x y =
     [] -> Nothing
     _ -> Just $ if isLast (head as) then groupLast as else groupMiddle as
   where xs = findOp' table x
-        as = [a | a <- xs, a `continue'` y]
+        as = [a | a <- xs, a `continue` y]
 
 -- Search the operator stack for the top-most parts waiting to be completed
 -- (i.e. on the left of an innner hole).
@@ -248,7 +180,10 @@ findBegin table x = case filterParts $ findOp' table x of
 allParts :: Table -> [Part]
 allParts (Table ops) = concatMap cut ops
 
+matchCurrent :: String -> [Part] -> [Part]
 matchCurrent x pts = filter ((==x) .partSymbol) pts
+
+matchPrevious :: [String] -> [Part] -> [Part]
 matchPrevious y pts = filter ((==y) . previousPart) pts
 
 -- TODO the groupXxx functions should not use 'union' but
@@ -276,7 +211,6 @@ groupMiddle (Middle ss' x s' k':pts) = go ss' s' k' pts
   where go ss s k [] = Middle ss x s k
         go ss s k (Middle ss2 _ s2 k2:xs)
           | ss /= ss2 = error "groupMiddle: different prefix"
-        go ss s k (Middle _ _ s2 k2:xs)
           | k == k2 = go ss (s `union` s2) k xs
         go _ _ _ _ = error "groupMiddle: ambiguous middle parts"
 groupMiddle _ = error "groupMiddle: not a Middle part"
@@ -358,11 +292,12 @@ partSymbol (Last _ _ s _ _) = s
 partSymbol (Lone _ _ s _) = s
 partSymbol (Middle _ s _ _) = s
 
+arity :: Part -> Int
 arity (First _ _ _ _) = error "arity: bad argument"
 arity (Middle _ _ _ _) = error "arity: bad argument"
 arity (Lone (BothOpen _) _ _ _) = 2
 arity (Lone _ _ _ _) = 1
-arity (Last _ p _ _ ar) = ar
+arity (Last _ _ _ _ ar) = ar
 
 data Opening = LeftOpen Bool
              | RightOpen Bool
@@ -413,11 +348,8 @@ previousPart (Last _ l _ _ _) = l
 previousPart (Lone _ _ _ _) = []
 previousPart (Middle l _ _ _) = l
 
-continue :: String -> Part -> Bool
-continue t p = t `elem` nextPart p
-
-continue' :: Part -> Part -> Bool
-continue' x y = previousPart x == previousPart y ++ [partSymbol y]
+continue :: Part -> Part -> Bool
+continue x y = previousPart x == previousPart y ++ [partSymbol y]
 
 part :: String -> Op -> [Part]
 part s o = filter ((==s) . partSymbol) $ cut o

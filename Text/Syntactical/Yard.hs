@@ -24,7 +24,6 @@ module Text.Syntactical.Yard
   ) where
 
 import Data.List (intersperse)
-import Data.Maybe (fromJust)
 
 import Text.Syntactical.Data
 
@@ -125,18 +124,18 @@ shunt table ts = case fix $ initial ts of
 
 step :: Table -> Shunt -> Shunt
 
-step table (S tt (s@(Op y):ss) oo@(os:oss) _) |
+step _ (S tt (s@(Op y):ss) oo@(os:oss) _) |
   end y && (not $ rightHole y)
   = case y of
    _ | discard y ->
     let (o:os') = os in S (o:tt) ss (os':oss) MatchedR
      | otherwise ->
-    let ((o:os'):oss') = apply table s oo in S (o:tt) ss (os':oss') MatchedR
+    let ((o:os'):oss') = apply s oo in S (o:tt) ss (os':oss') MatchedR
 
 -- A number is on the input stack. It goes straight
 -- to the output unless we would end up trying to apply
 -- another (parsed just before) number. The stack can be empty.
-step table sh@(S tt@(t@(Num b):ts) st oo@(os:oss) _) = case sh of
+step _ sh@(S tt@(t@(Num b):ts) st oo@(os:oss) _) = case sh of
   S _ (Sym _:_)  ((Num _:_):_) _     -> S ts st ((t:os):oss) Inert
   S _ (Node _:_) ((Num _:_):_) _     -> S ts st ((t:os):oss) Inert
   S _ (Op y:_)   ((Num a:_):_) Inert
@@ -169,15 +168,14 @@ step table (S tt@((Sym x):ts) st@(s:ss) oo _)
       | begin pt1 && not (leftHole pt1) ->
       S ts (Op pt1:st) oo StackL
     (_, Nothing) ->
-      S tt ss (apply table s oo) FlushApp
+      S tt ss (apply s oo) FlushApp
 
 -- An operator part is on the input stack and on the stack.
 step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
---  let (Left pt1, Just pt2) = findBoth table x st in go pt1 pt2
   case findBoth table x st of
     (Left pt1, Just pt2) -> go pt1 pt2
     (Right (Begin pt1), Just pt2) -> go pt1 pt2
-    (Right (MissingBegin ps), Just pt2) ->
+    (Right (MissingBegin ps), Just _) ->
       S tt st oo (failure $ Incomplete $ head ps)
 
   where
@@ -188,7 +186,7 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
       S ts (Op pt1:st) ([]:oo) StackL
 
       | rightHoleKind pt2 == Just SExpression =
-      if x `continue` pt2
+      if pt1 `continue` pt2
       then let (os':h:oss') = oo
                ap = Node (reverse os')
            in if stackedOp ru
@@ -199,23 +197,23 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
       | rightHole pt2 && leftHole pt1 && stackedOp ru =
       S tt st oo (failure $ EmptyHole (partSymbol y) x)
 
-      | pt1 `continue'` pt2 = S ts (Op pt1:ss) oo ContinueOp
+      | pt1 `continue` pt2 = S ts (Op pt1:ss) oo ContinueOp
 
       | not (leftHole pt1) && begin pt1 = S ts (Op pt1:st) oo StackL
 
-      | pt1 `lower` pt2 = S tt ss (apply table s oo) FlushOp
+      | pt1 `lower` pt2 = S tt ss (apply s oo) FlushOp
 
       | otherwise = S ts (Op pt1:st) oo StackOp
 
 -- No more tokens on the input stack, just have to flush
 -- the remaining applicators and/or operators.
-step table sh@(S [] (s:ss) oo _) = case s of
-  Sym _              -> S [] ss (apply table s oo) FlushApp
-  Node _             -> S [] ss (apply table s oo) FlushApp
+step _ sh@(S [] (s:ss) oo _) = case s of
+  Sym _              -> S [] ss (apply s oo) FlushApp
+  Node _             -> S [] ss (apply s oo) FlushApp
   Op y | end y ->
     -- The infix or prefix operator has all its parts.
     -- The postfix/closed is handled in the first equation.
-    S [] ss (apply table s oo) FlushOp
+    S [] ss (apply s oo) FlushOp
        | otherwise ->
     -- The operator is not complete.
     sh { rule = failure $ nextPart y `MissingAfter` [partSymbol y] }
@@ -249,8 +247,8 @@ step _ sh@(S [] [] [[_]] _) = sh { rule = Done Success }
 -- This equation should never be reached; otherwise it is a bug.
 step _ sh = sh { rule = failure Unexpected }
 
-apply :: Table -> Tree -> [[Tree]] -> [[Tree]]
-apply table s@(Op y) (os:oss) =
+apply :: Tree -> [[Tree]] -> [[Tree]]
+apply s@(Op y) (os:oss) =
   if length l < nargs
   -- TODO this error case should probably be discovered earlier,
   -- so hitting this point should be a bug.
@@ -258,9 +256,9 @@ apply table s@(Op y) (os:oss) =
   else (Node (s:reverse l) : r) : oss
   where nargs = arity y
         (l,r) = splitAt nargs os
-apply _ s@(Sym _) (os:h:oss) =  (ap:h):oss
+apply s@(Sym _) (os:h:oss) =  (ap:h):oss
   where ap = if null os then s else Node (s:reverse os)
-apply _ s@(Node _) (os:h:oss) =  (ap:h):oss
+apply s@(Node _) (os:h:oss) =  (ap:h):oss
   where ap = if null os then s else Node (s:reverse os)
-apply _ s oss = error $ "can't apply " ++ show s ++ " to " ++ show oss
+apply s oss = error $ "can't apply " ++ show s ++ " to " ++ show oss
 
