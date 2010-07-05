@@ -65,6 +65,8 @@ data Failure =
   | CantApply Int Int -- error case: can't apply number to number
   | EmptyHole String String -- error case: no sub-expression between ops/parts.
   | Incomplete [String] -- error case: missing operator part(s) after the strings.
+  | MissingSubBefore String -- error case: missing sub-expression before string
+  | MissingSubAfter String -- error case: missing sub-expression after string
   | Unexpected -- unexpected state (can't happen, this is a bug)
   deriving (Eq, Show)
 
@@ -217,12 +219,14 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
 
 -- No more tokens on the input stack, just have to flush
 -- the remaining applicators and/or operators.
-step _ sh@(S [] (s:ss) oo _) = case s of
+step _ sh@(S [] (s:ss) oo ru) = case s of
   Sym _              -> S [] ss (apply s oo) FlushApp
   Node _             -> S [] ss (apply s oo) FlushApp
-  Op y | end y ->
+  Op y | end y && rightHole y && stackedOp ru ->
+    rule sh $ failure $ MissingSubAfter (partSymbol y)
     -- The infix or prefix operator has all its parts.
     -- The postfix/closed is handled in the first equation.
+       | end y ->
     S [] ss (apply s oo) FlushOp
        | otherwise ->
     -- The operator is not complete.
@@ -244,7 +248,7 @@ step table sh@(S (t:ts) [] oo ru) = case t of
   where
     go x pt1
       | leftHole pt1 && ru == Initial =
-      error $ "missing sub-expression before " ++ x
+      rule sh . failure $ MissingSubBefore x
       | leftHole pt1 =
       S ts [Op pt1] oo StackOp
       | rightHoleKind pt1 == Just SExpression =

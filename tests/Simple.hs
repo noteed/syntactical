@@ -235,22 +235,22 @@ testsTable0' =
   , ("a _/ b", MissingAfter ["/."] ["_/"])
   , ("(+ 2)", EmptyHole "(" "+")
   , ("true : 1 + 2", MissingBefore [["?"]] ":")
+  , ("+ 1 2", MissingSubBefore "+")
+  , ("+", MissingSubBefore "+")
+  , ("+ 1", MissingSubBefore "+")
+  , ("1 +", MissingSubAfter "+")
+  , ("|", MissingBefore [["["]] "|")
+  , ("[", MissingAfter ["|"] ["["])
+  , ("]", MissingBefore [["[","|"]] "]")
+  , ("(", MissingAfter [")"] ["("])
+  , (")", MissingBefore [["("]] ")")
+  , ("⟨", MissingAfter ["⟩"] ["⟨"])
+  , ("⟩", MissingBefore [["⟨"]] "⟩")
+  , ("_/ b /.", MissingSubBefore "_/")
 -- TODO cases above with parenthesis or in bigger expression.
 -- TODO obviously those are not success, but I have to
 -- create and recognize the error cases.
 {-
-  , ("1 +", Success)
-  , ("+ 1 2", Success)
-  , ("+ 2", Success)
-  , ("+", Success)
-  , ("|", Success)
-  , ("[", Success)
-  , ("]", Success)
-  , ("_/ b /.", Success)
-  , ("(", )
-  , (")", )
-  , ("⟨", )
-  , ("⟩", )
   , ("1 (1 + 2)", ) -- The equation with a number on the output stack should be extended.
   , ("# a %", Error "precedence cannot be mixed")
 -}
