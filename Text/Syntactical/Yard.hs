@@ -192,15 +192,17 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
       S ts (Op pt1:st) oo StackL
       | rightHoleKind pt1 == Just SExpression =
       S ts (Op pt1:st) ([]:oo) StackL
-
+      | rightHoleKind y == Just SExpression && pt1 `continue` y && stackedOp ru =
+      -- build the () symbol
+      let (os':h:oss') = oo
+          ap = Node (reverse os')
+      in S (Sym (concat $ previousPart pt1++[x]):ts) ss (h:oss') MakeInert
+      | rightHoleKind y == Just SExpression && pt1 `continue` y =
+      let (os':h:oss') = oo
+          ap = Node (reverse os')
+      in S ts (Op pt1:ss) ((ap:h):oss') MatchedR
       | rightHoleKind y == Just SExpression =
-      if pt1 `continue` y
-      then let (os':h:oss') = oo
-               ap = Node (reverse os')
-           in if stackedOp ru
-              then S (Sym (concat $ previousPart pt1++[x]):ts) ss (h:oss') MakeInert -- build the () symbol
-              else S ts (Op pt1:ss) ((ap:h):oss') MatchedR
-      else S ts st ((t:os):oss) SExpr
+      S ts st ((t:os):oss) SExpr
 
       | rightHole y && leftHole pt1 && stackedOp ru =
       S tt st oo (failure $ EmptyHole (partSymbol y) x)
