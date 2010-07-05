@@ -184,7 +184,7 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
     Left pt1 -> go pt1
     Right (Begin pt1) -> go pt1
     Right (MissingBegin ps) ->
-      S tt st oo (failure $ Incomplete $ head ps)
+      S tt st oo (failure $ ps `MissingBefore` x)
     Right NoBegin -> error "can't happen" -- x is in the table for sure
   where
     go pt1
@@ -226,7 +226,8 @@ step _ sh@(S [] (s:ss) oo _) = case s of
     S [] ss (apply s oo) FlushOp
        | otherwise ->
     -- The operator is not complete.
-    rule sh $ failure $ nextPart y `MissingAfter` [partSymbol y]
+    rule sh $ failure $
+      nextPart y `MissingAfter` (previousPart y ++ [partSymbol y])
   Num _ -> error "can't happen: but TODO make a specific data type for the op stack"
 
 -- The applicator/operator stack is empty.
