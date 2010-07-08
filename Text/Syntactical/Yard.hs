@@ -14,6 +14,16 @@
 -- TODO use hlint.
 -- TODO write more realistic example (for a Haskell-like syntax)
 
+-- Note: The parser allows applying a number to another,
+-- e.g. 1 2. Thus the CantApply error case isn't used. This
+-- is because Syntactical tries to force as few restriction
+-- as possible on the syntactic structure. Maybe this could
+-- be turned into an option. The proper to forbid such
+-- 'number application' is to use some type-checking. If
+-- 1 2 should be disallowed, 1 (2 + 3) or 1 a shoule be
+-- disallowed too (no code for this case. The 'apply'
+-- function seems a good place to implement such restriction.
+
 module Text.Syntactical.Yard
   ( shunt, steps, Failure(..), showFailure
   ) where
@@ -62,7 +72,7 @@ data Failure =
     MissingBefore [[String]] String -- ^ missing parts before part
   | MissingAfter [String] [String]  -- ^ missing parts after parts
   | CantMix Op Op                   -- ^ can't mix two operators
-  | CantApply Int Int               -- ^ can't apply number to number
+--  | CantApply Int Int               -- ^ can't apply number to number
   | MissingSubBetween String String -- ^ missing sub-expression between parts
   | MissingSubBefore String         -- ^ missing sub-expression before string
   | MissingSubAfter String          -- ^ missing sub-expression after string
@@ -84,8 +94,8 @@ showFailure f = case f of
     concat (intersperse ", " p) ++ " after " ++ concat (intersperse " " ps)
   CantMix a b ->
      "Parse error: cannot mix operators " ++ show a ++ " and " ++ show b
-  CantApply a b ->
-    "Parse error: cannot apply " ++ show a ++ " to " ++ show b
+--  CantApply a b ->
+--    "Parse error: cannot apply " ++ show a ++ " to " ++ show b
   MissingSubBetween a b ->
     "Parse error: no sub-expression between " ++ a ++ " and " ++ b
   MissingSubBefore a ->
@@ -152,13 +162,15 @@ step _ (S tt (s@(Op y):ss) oo@(os:oss) _) | end y && (not $ rightHole y)
 -- A number is on the input stack. It goes straight
 -- to the output unless we would end up trying to apply
 -- another (parsed just before) number. The stack can be empty.
-step _ sh@(S (t@(Num b):ts) st (os:oss) _) = case sh of
+step _ sh@(S (t@(Num _):ts) st (os:oss) _) = case sh of
+{-
   S _ (Sym _:_)  ((Num _:_):_) _     -> S ts st ((t:os):oss) Inert
   S _ (Node _:_) ((Num _:_):_) _     -> S ts st ((t:os):oss) Inert
   S _ (Op y:_)   ((Num a:_):_) Inert
     | rightHoleKind y == Just SExpression -> S ts st ((t:os):oss) Inert
     | otherwise -> rule sh (failure $ CantApply a b)
   S _ _          ((Num a:_):_) Inert -> rule sh (failure $ CantApply a b)
+-}
   _                                  -> S ts st ((t:os):oss) Inert
 
 -- An applicator is on the input stack.

@@ -219,11 +219,6 @@ testsTable0' =
   , ("[ a | b", MissingAfter ["]"] ["[","|"])
   , ("a | b ]", MissingBefore [["["]] "|")
   , ("[ a b ]", MissingBefore [["[","|"]] "]")
-  , ("1 2", CantApply 1 2)
-  , ("(1 2)", CantApply 1 2)
-  , ("f (1 2)", CantApply 1 2)
-  , ("</ 1 2 />", CantApply 1 2)
-  , ("1 2 + 3", CantApply 1 2)
   , ("1 + * 3", MissingSubBetween "+" "*")
   , ("1 * + 3", MissingSubBetween "*" "+")
   , ("()", MissingSubBetween "(" ")")
@@ -251,9 +246,17 @@ testsTable0' =
 -- TODO obviously those are not success, but I have to
 -- create and recognize the error cases.
 {-
-  , ("1 (1 + 2)", ) -- The equation with a number on the output stack should be extended.
   , ("# a %", Error "precedence cannot be mixed")
 -}
+
+-- See the Note in Yard.hs.
+--  , ("1 2", CantApply 1 2)
+--  , ("(1 2)", CantApply 1 2)
+--  , ("f (1 2)", CantApply 1 2)
+--  , ("</ 1 2 />", CantApply 1 2)
+--  , ("1 2 + 3", CantApply 1 2)
+--  , ("1 (1 + 2)", ...)
+--  , ("1 a"), ...)
   ]
 
 checkTable0 = checkTests table0 testsTable0
