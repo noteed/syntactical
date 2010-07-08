@@ -18,7 +18,7 @@ data Tree = Node [Tree]
 -- TODO if the above is true, then algorithm should return the
 -- original data instead of a Tree.
            | Sym String
-           | Op Part -- on the stack, TODO turn into Sym on the output
+           | Part Part -- on the stack, TODO turn into Sym on the output
   deriving Eq
 
 -- The boolean is to specify if the operator should show up
@@ -87,7 +87,7 @@ display :: Tree -> String
 display = tail . display'
   where
   display' (Sym s) = ' ' : s
-  display' (Op y) = ' ' : concat (previousPart y ++ [partSymbol y])
+  display' (Part y) = ' ' : concat (previousPart y ++ [partSymbol y])
   display' (Node es) = ' ' : '⟨' : tail (concatMap display' es) ++ "⟩"
 
 lower :: Part -> Part -> Bool
@@ -121,7 +121,7 @@ findContinuing xs y = case as of
 -- (i.e. on the left of an innner hole).
 findIncompletePart :: Table -> [Tree] -> Maybe Part
 findIncompletePart _ [] = Nothing
-findIncompletePart _ (Op y:_) | not (end y) = Just y
+findIncompletePart _ (Part y:_) | not (end y) = Just y
 findIncompletePart table (_:ss) = findIncompletePart table ss
 
 -- - The operator doesn't contain any operator
