@@ -59,15 +59,14 @@ data Result =
 -- The 'showFailure' function can be used to give them a textual
 -- representation.
 data Failure =
-    MissingBefore [[String]] String -- error case: missing parts before part
-  | MissingAfter [String] [String]  -- error case: missing part after parts
-  | CantMix Op Op -- error case: can't mix two operators
-  | CantApply Int Int -- error case: can't apply number to number
-  | EmptyHole String String -- error case: no sub-expression between ops/parts.
-  | Incomplete [String] -- error case: missing operator part(s) after the strings.
-  | MissingSubBefore String -- error case: missing sub-expression before string
-  | MissingSubAfter String -- error case: missing sub-expression after string
-  | Unexpected -- unexpected state (can't happen, this is a bug)
+    MissingBefore [[String]] String -- ^ missing parts before part
+  | MissingAfter [String] [String]  -- ^ missing parts after parts
+  | CantMix Op Op                   -- ^ can't mix two operators
+  | CantApply Int Int               -- ^ can't apply number to number
+  | MissingSubBetween String String -- ^ missing sub-expression between parts
+  | MissingSubBefore String         -- ^ missing sub-expression before string
+  | MissingSubAfter String          -- ^ missing sub-expression after string
+  | Unexpected                      -- ^ this is a bug if it happens
   deriving (Eq, Show)
 
 isDone :: Shunt -> Bool
@@ -77,15 +76,24 @@ isDone _ = False
 -- | Give a textual representation of a 'Failure'.
 showFailure :: Failure -> String
 showFailure f = case f of
-  MissingAfter p ps -> "Parse error: missing operator part " ++
-    concat (intersperse ", " p) ++ " after " ++ concat (intersperse " " ps)
-  MissingBefore ps p -> "Parse error: missing operator parts " ++
+  MissingBefore ps p ->
+    "Parse error: missing operator parts " ++
     concatMap (\pt -> concat (intersperse " " pt)) ps ++ " before " ++ p
-  CantMix _ _ -> "Parse error: cannot mix operators"
-  CantApply a b -> "Parse error: cannot apply " ++ show a ++ " to " ++ show b
-  EmptyHole a b -> "Parse error: no sub-expression between " ++ a ++ " and " ++ b
-  Incomplete s -> "Parse error: missing operator parts after " ++ show s
-  Unexpected -> "Parsing raised a bug"
+  MissingAfter p ps ->
+    "Parse error: missing operator part " ++
+    concat (intersperse ", " p) ++ " after " ++ concat (intersperse " " ps)
+  CantMix a b ->
+     "Parse error: cannot mix operators " ++ show a ++ " and " ++ show b
+  CantApply a b ->
+    "Parse error: cannot apply " ++ show a ++ " to " ++ show b
+  MissingSubBetween a b ->
+    "Parse error: no sub-expression between " ++ a ++ " and " ++ b
+  MissingSubBefore a ->
+    "Parse error: no sub-expression before " ++ a
+  MissingSubAfter a ->
+    "Parse error: no sub-expression after " ++ a
+  Unexpected ->
+    "Parsing raised a bug"
 
 failure :: Failure -> Rule
 failure f = Done $ Failure f
@@ -144,15 +152,13 @@ step _ (S tt (s@(Op y):ss) oo@(os:oss) _) | end y && (not $ rightHole y)
 -- A number is on the input stack. It goes straight
 -- to the output unless we would end up trying to apply
 -- another (parsed just before) number. The stack can be empty.
-step _ sh@(S tt@(t@(Num b):ts) st oo@(os:oss) _) = case sh of
+step _ sh@(S (t@(Num b):ts) st (os:oss) _) = case sh of
   S _ (Sym _:_)  ((Num _:_):_) _     -> S ts st ((t:os):oss) Inert
   S _ (Node _:_) ((Num _:_):_) _     -> S ts st ((t:os):oss) Inert
   S _ (Op y:_)   ((Num a:_):_) Inert
-    | rightHoleKind y == Just SExpression ->
-      S ts st ((t:os):oss) Inert
-    | otherwise ->
-      S tt st oo (failure $ CantApply a b)
-  S _ _          ((Num a:_):_) Inert -> S tt st oo (failure $ CantApply a b)
+    | rightHoleKind y == Just SExpression -> S ts st ((t:os):oss) Inert
+    | otherwise -> rule sh (failure $ CantApply a b)
+  S _ _          ((Num a:_):_) Inert -> rule sh (failure $ CantApply a b)
   _                                  -> S ts st ((t:os):oss) Inert
 
 -- An applicator is on the input stack.
@@ -181,12 +187,11 @@ step table (S tt@((Sym x):ts) st@(s:ss) oo _)
       S tt ss (apply s oo) FlushApp
 
 -- An operator part is on the input stack and on the stack.
-step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
+step table sh@(S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
   case findBoth table x st of
     Left pt1 -> go pt1
     Right (Begin pt1) -> go pt1
-    Right (MissingBegin ps) ->
-      S tt st oo (failure $ ps `MissingBefore` x)
+    Right (MissingBegin ps) -> rule sh (failure $ ps `MissingBefore` x)
     Right NoBegin -> error "can't happen" -- x is in the table for sure
   where
     go pt1
@@ -196,9 +201,7 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
       S ts (Op pt1:st) ([]:oo) StackL
       | rightHoleKind y == Just SExpression && pt1 `continue` y && stackedOp ru =
       -- build the () symbol
-      let (os':h:oss') = oo
-          ap = Node (reverse os')
-      in S (Sym (concat $ previousPart pt1++[x]):ts) ss (h:oss') MakeInert
+      S (Sym (concat $ previousPart pt1++[x]):ts) ss oss MakeInert
       | rightHoleKind y == Just SExpression && pt1 `continue` y =
       let (os':h:oss') = oo
           ap = Node (reverse os')
@@ -207,7 +210,7 @@ step table (S tt@(t@(Sym x):ts) st@(s@(Op y):ss) oo@(os:oss) ru) =
       S ts st ((t:os):oss) SExpr
 
       | rightHole y && leftHole pt1 && stackedOp ru =
-      S tt st oo (failure $ EmptyHole (partSymbol y) x)
+      rule sh (failure $ partSymbol y `MissingSubBetween` x)
 
       | pt1 `continue` y = S ts (Op pt1:ss) oo ContinueOp
 
@@ -223,15 +226,15 @@ step _ sh@(S [] (s:ss) oo ru) = case s of
   Sym _              -> S [] ss (apply s oo) FlushApp
   Node _             -> S [] ss (apply s oo) FlushApp
   Op y | end y && rightHole y && stackedOp ru ->
-    rule sh $ failure $ MissingSubAfter (partSymbol y)
+    rule sh (failure $ MissingSubAfter $ partSymbol y)
     -- The infix or prefix operator has all its parts.
     -- The postfix/closed is handled in the first equation.
        | end y ->
     S [] ss (apply s oo) FlushOp
        | otherwise ->
     -- The operator is not complete.
-    rule sh $ failure $
-      nextPart y `MissingAfter` (previousPart y ++ [partSymbol y])
+    rule sh (failure $
+      nextPart y `MissingAfter` (previousPart y ++ [partSymbol y]))
   Num _ -> error "can't happen: but TODO make a specific data type for the op stack"
 
 -- The applicator/operator stack is empty.
@@ -241,14 +244,13 @@ step table sh@(S (t:ts) [] oo ru) = case t of
     NoBegin   -> S ts [t] ([]:oo) StackApp
     -- x is the first sub-op, and the stack is empty
     Begin pt1 -> go x pt1
-    MissingBegin xs ->
-      rule sh $ failure $ xs `MissingBefore` x
+    MissingBegin xs -> rule sh (failure $ xs `MissingBefore` x)
   Num _ -> error "can't happen: Num is handled in a previous equation"
   Op _ -> error "can't happen: but TODO make a specifi data type for the input stack"
   where
     go x pt1
       | leftHole pt1 && ru == Initial =
-      rule sh . failure $ MissingSubBefore x
+      rule sh (failure $ MissingSubBefore x)
       | leftHole pt1 =
       S ts [Op pt1] oo StackOp
       | rightHoleKind pt1 == Just SExpression =
@@ -260,7 +262,7 @@ step table sh@(S (t:ts) [] oo ru) = case t of
 step _ sh@(S [] [] [[_]] _) = rule sh $ Done Success
 
 -- This equation should never be reached; otherwise it is a bug.
-step _ sh = rule sh $ failure Unexpected
+step _ sh = rule sh (failure Unexpected)
 
 apply :: Tree -> [[Tree]] -> [[Tree]]
 apply s@(Op y) (os:oss) =
