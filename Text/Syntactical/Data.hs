@@ -17,7 +17,6 @@ data Tree = Node [Tree]
 -- be converted to this representation.
 -- TODO if the above is true, then algorithm should return the
 -- original data instead of a Tree.
-           | Num Int
            | Sym String
            | Op Part -- on the stack, TODO turn into Sym on the output
   deriving Eq
@@ -87,7 +86,6 @@ instance Show Tree where
 display :: Tree -> String
 display = tail . display'
   where
-  display' (Num i) = ' ' : show i
   display' (Sym s) = ' ' : s
   display' (Op y) = ' ' : concat (previousPart y ++ [partSymbol y])
   display' (Node es) = ' ' : '⟨' : tail (concatMap display' es) ++ "⟩"

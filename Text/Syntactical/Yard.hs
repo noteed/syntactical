@@ -159,20 +159,6 @@ step _ (S tt (s@(Op y):ss) oo@(os:oss) _) | end y && (not $ rightHole y)
   then let (o:os') = os in S (o:tt) ss (os':oss) MatchedR
   else let ((o:os'):oss') = apply s oo in S (o:tt) ss (os':oss') MatchedR
 
--- A number is on the input stack. It goes straight
--- to the output unless we would end up trying to apply
--- another (parsed just before) number. The stack can be empty.
-step _ sh@(S (t@(Num _):ts) st (os:oss) _) = case sh of
-{-
-  S _ (Sym _:_)  ((Num _:_):_) _     -> S ts st ((t:os):oss) Inert
-  S _ (Node _:_) ((Num _:_):_) _     -> S ts st ((t:os):oss) Inert
-  S _ (Op y:_)   ((Num a:_):_) Inert
-    | rightHoleKind y == Just SExpression -> S ts st ((t:os):oss) Inert
-    | otherwise -> rule sh (failure $ CantApply a b)
-  S _ _          ((Num a:_):_) Inert -> rule sh (failure $ CantApply a b)
--}
-  _                                  -> S ts st ((t:os):oss) Inert
-
 -- An applicator is on the input stack.
 step table (S (t:ts) st@(s:_) oo@(os:oss) _)
   | applicator table t = case s of
@@ -183,7 +169,6 @@ step table (S (t:ts) st@(s:_) oo@(os:oss) _)
       S ts (t:st) ([]:oo) StackApp
   Sym _                        -> S ts st ((t:os):oss) Inert
   Node _                       -> S ts st ((t:os):oss) Inert
-  Num _ -> error "can't happen: Num is handled in a previous equation"
 
 -- An operator part is on the input stack and an applicator is on
 -- the stack.
@@ -247,7 +232,6 @@ step _ sh@(S [] (s:ss) oo ru) = case s of
     -- The operator is not complete.
     rule sh (failure $
       nextPart y `MissingAfter` (previousPart y ++ [partSymbol y]))
-  Num _ -> error "can't happen: but TODO make a specific data type for the op stack"
 
 -- The applicator/operator stack is empty.
 step table sh@(S (t:ts) [] oo ru) = case t of
@@ -257,7 +241,6 @@ step table sh@(S (t:ts) [] oo ru) = case t of
     -- x is the first sub-op, and the stack is empty
     Begin pt1 -> go x pt1
     MissingBegin xs -> rule sh (failure $ xs `MissingBefore` x)
-  Num _ -> error "can't happen: Num is handled in a previous equation"
   Op _ -> error "can't happen: but TODO make a specifi data type for the input stack"
   where
     go x pt1

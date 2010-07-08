@@ -208,6 +208,15 @@ testsTable0 = [
   , ("\\ a b -> a + b", "⟨\\-> ⟨a b⟩ ⟨+ a b⟩⟩")
   , ("\\ a 2 -> a + b", "⟨\\-> ⟨a 2⟩ ⟨+ a b⟩⟩")
   , ("\\ 1 2 -> a + b", "⟨\\-> ⟨1 2⟩ ⟨+ a b⟩⟩")
+
+-- See the Note in Yard.hs.
+  , ("1 2", "⟨1 2⟩")
+  , ("(1 2)", "⟨1 2⟩")
+  , ("f (1 2)", "⟨f ⟨1 2⟩⟩")
+  , ("</ 1 2 />", "⟨<//> ⟨1 2⟩⟩")
+  , ("1 2 + 3", "⟨+ ⟨1 2⟩ 3⟩")
+  , ("1 (1 + 2)", "⟨1 ⟨+ 1 2⟩⟩")
+  , ("1 a", "⟨1 a⟩")
   ]
 
 testsTable0' :: [(String, Failure)]
@@ -248,15 +257,6 @@ testsTable0' =
 {-
   , ("# a %", Error "precedence cannot be mixed")
 -}
-
--- See the Note in Yard.hs.
---  , ("1 2", CantApply 1 2)
---  , ("(1 2)", CantApply 1 2)
---  , ("f (1 2)", CantApply 1 2)
---  , ("</ 1 2 />", CantApply 1 2)
---  , ("1 2 + 3", CantApply 1 2)
---  , ("1 (1 + 2)", ...)
---  , ("1 a"), ...)
   ]
 
 checkTable0 = checkTests table0 testsTable0
@@ -291,8 +291,7 @@ separate' ('⟩':cs) = " ⟩ " ++ separate' cs
 separate' (c:cs) = c : separate' cs
 separate' [] = []
 
-token (c:cs) | c `elem` ['a'..'z'] ++ "()⟨⟩+-*/?:#i°%!<>[]|,{};=\"._\\" = Sym (c:cs)
-             | otherwise = Num (read [c])
+token = Sym
 
 -- 
 
