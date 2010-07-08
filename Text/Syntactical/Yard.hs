@@ -15,13 +15,10 @@
 -- TODO write more realistic example (for a Haskell-like syntax)
 
 -- Note: The parser allows applying a number to another,
--- e.g. 1 2. Thus the CantApply error case isn't used. This
--- is because Syntactical tries to force as few restriction
--- as possible on the syntactic structure. Maybe this could
--- be turned into an option. The proper to forbid such
--- 'number application' is to use some type-checking. If
--- 1 2 should be disallowed, 1 (2 + 3) or 1 a shoule be
--- disallowed too (no code for this case. The 'apply'
+-- e.g. 1 2. Maybe this could be turned into an option.
+-- The proper way to forbid such 'number application' is
+-- to use some type-checking. If 1 2 should be disallowed,
+-- 1 (2 + 3) or 1 a shoule be disallowed too. The 'apply'
 -- function seems a good place to implement such restriction.
 
 module Text.Syntactical.Yard
@@ -72,7 +69,6 @@ data Failure =
     MissingBefore [[String]] String -- ^ missing parts before part
   | MissingAfter [String] [String]  -- ^ missing parts after parts
   | CantMix Op Op                   -- ^ can't mix two operators
---  | CantApply Int Int               -- ^ can't apply number to number
   | MissingSubBetween String String -- ^ missing sub-expression between parts
   | MissingSubBefore String         -- ^ missing sub-expression before string
   | MissingSubAfter String          -- ^ missing sub-expression after string
@@ -94,8 +90,6 @@ showFailure f = case f of
     concat (intersperse ", " p) ++ " after " ++ concat (intersperse " " ps)
   CantMix a b ->
      "Parse error: cannot mix operators " ++ show a ++ " and " ++ show b
---  CantApply a b ->
---    "Parse error: cannot apply " ++ show a ++ " to " ++ show b
   MissingSubBetween a b ->
     "Parse error: no sub-expression between " ++ a ++ " and " ++ b
   MissingSubBefore a ->
