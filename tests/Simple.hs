@@ -1,3 +1,4 @@
+{-# Language TypeSynonymInstances #-}
 module Main where
 
 import Test.Framework (defaultMain, testGroup, Test)
@@ -10,7 +11,17 @@ import Text.Syntactical.Data
 
 import qualified Holes
 
-table0 :: Table
+instance Shuntable String where
+  operator = concat
+
+display :: Tree String -> String
+display = tail . display'
+  where
+  display' (Sym s) = ' ' : s
+  display' (Part y) = ' ' : concat (previousPart y ++ [partSymbol y])
+  display' (Node es) = ' ' : '⟨' : tail (concatMap display' es) ++ "⟩"
+
+table0 :: Table String
 table0 = buildTable
  [ [ closed_ "(" [] ")" Distfix
    , closed_ "⟨" [] "⟩" SExpression
@@ -219,7 +230,7 @@ testsTable0 = [
   , ("1 a", "⟨1 a⟩")
   ]
 
-testsTable0' :: [(String, Failure)]
+testsTable0' :: [(String, Failure String)]
 testsTable0' =
   [ ("true then 1 else 0", MissingBefore [["if"]] "then")
   , ("if true 1 else 0", MissingBefore [["if","then"]] "else")
@@ -270,11 +281,11 @@ checkTests table l = mapM_ (check table) l
 check table (i,o) =
   let ts = tokenize i in case shunt table ts of
   Right o' ->
-    if o == show o'
+    if o == display o'
     then return ()
     else do putStrLn $ "FAIL: input: " ++ i
               ++ ", expected: " ++ o
-              ++ ", computed: " ++ show o'
+              ++ ", computed: " ++ display o'
             steps table ts
   _ -> do putStrLn $ "FAIL: input: " ++ i
             ++ ", expected: " ++ o
@@ -314,10 +325,10 @@ testYard = testGroup "Text.Syntactical.Yard"
 -- Apply the parser p to i and check if it returns
 -- the expected value o.
 helper p (i,o) = testCase i $ case p i of
-  Right o' -> o @=? show o'
+  Right o' -> o @=? display o'
   Left err -> assertFailure $ "cannot parse: " ++ show err
 
 helper' p (i,o) = testCase i $ case p i of
-  Right o' -> assertFailure $ "unexpected successful parse: " ++ show o'
+  Right o' -> assertFailure $ "unexpected successful parse: " ++ display o'
   Left o' -> o @=? o'
 

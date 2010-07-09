@@ -28,6 +28,7 @@ module Text.Syntactical.Yard
 import Data.List (intersperse)
 
 import Text.Syntactical.Data (
+  Shuntable, operator,
   Tree(..), Op(..), Kind(..), Table,
   begin, end, leftHole, rightHole, rightHoleKind, discard,
   applicator, continue, lower,
@@ -40,7 +41,7 @@ import Text.Syntactical.Data (
 -- placed on the (operator/applicator) stack. If there is
 -- already such a symbol on the stack, it goes straight
 -- to the output stack (this is the Inert case).
-data Rule = Initial
+data Rule a = Initial
           | Inert      -- not an operator or an applicator, goes
                        -- straight to the output stack
           | MakeInert  -- apply and push on the the input stack
@@ -54,33 +55,33 @@ data Rule = Initial
                        -- at the top of the stack
           | MatchedR   -- handle the last part of a closed operator
           | SExpr      -- build an s-expression
-          | Done Result
+          | Done (Result a)
   deriving (Show, Eq)
 
-data Result =
+data Result a =
     Success    -- everything is successfuly parsed
-  | Failure Failure
+  | Failure (Failure a)
   deriving (Eq, Show)
 
 -- | The different failure cases the 'shunt' function can return.
 -- The 'showFailure' function can be used to give them a textual
 -- representation.
-data Failure =
-    MissingBefore [[String]] String -- ^ missing parts before part
-  | MissingAfter [String] [String]  -- ^ missing parts after parts
-  | CantMix Op Op                   -- ^ can't mix two operators
-  | MissingSubBetween String String -- ^ missing sub-expression between parts
-  | MissingSubBefore String         -- ^ missing sub-expression before string
-  | MissingSubAfter String          -- ^ missing sub-expression after string
-  | Unexpected                      -- ^ this is a bug if it happens
+data Failure a =
+    MissingBefore [[a]] a -- ^ missing parts before part
+  | MissingAfter [a] [a]  -- ^ missing parts after parts
+  | CantMix (Op a) (Op a) -- ^ can't mix two operators
+  | MissingSubBetween a a -- ^ missing sub-expression between parts
+  | MissingSubBefore a    -- ^ missing sub-expression before string
+  | MissingSubAfter a     -- ^ missing sub-expression after string
+  | Unexpected            -- ^ this is a bug if it happens
   deriving (Eq, Show)
 
-isDone :: Shunt -> Bool
+isDone :: Shunt a -> Bool
 isDone (S _ _ _ (Done _)) = True
 isDone _ = False
 
 -- | Give a textual representation of a 'Failure'.
-showFailure :: Failure -> String
+showFailure :: Failure String -> String
 showFailure f = case f of
   MissingBefore ps p ->
     "Parse error: missing operator parts " ++
@@ -99,45 +100,46 @@ showFailure f = case f of
   Unexpected ->
     "Parsing raised a bug"
 
-failure :: Failure -> Rule
+failure :: Failure a -> Rule a
 failure f = Done $ Failure f
 
-stackedOp :: Rule -> Bool
+stackedOp :: Rule a -> Bool
 stackedOp StackL = True
 stackedOp StackOp = True
 stackedOp ContinueOp = True
 stackedOp _ = False
 
-data Shunt = S
-  [Tree]   -- list of tokens (Nodes can be pushed back.)
-  [Tree]   -- stack of operators and applicators
-  [[Tree]] -- stack of stacks
-  Rule
+data Shunt a = S
+  [Tree a]   -- list of tokens (Nodes can be pushed back.)
+  [Tree a]   -- stack of operators and applicators
+  [[Tree a]] -- stack of stacks
+  (Rule a)
 
-rule :: Shunt -> Rule -> Shunt
+rule :: Shunt a -> Rule a -> Shunt a
 rule (S tt st oo _) ru = S tt st oo ru
 
-instance Show Shunt where
-  show (S ts ss os ru) =
-    pad 20 ts ++ pad 20 ss ++ pad 20 os ++ "   " ++ show ru
+instance Show a => Show (Shunt a) where
+    show _ = "TODO show (Shunt a)" -- Make a Show module with a ShowShuntable class.
+--  show (S ts ss os ru) =
+--    pad 20 ts ++ pad 20 ss ++ pad 20 os ++ "   " ++ show ru
 
 pad :: Show a => Int -> a -> [Char]
 pad n s = let s' = show s in replicate (n - length s') ' ' ++ s'
 
 -- | Similar to the 'shunt' function but print the steps
 -- performed by the modified shunting yard algorithm.
-steps :: Table -> [Tree] -> IO ()
+steps :: (Show a, Shuntable a) => Table a -> [Tree a] -> IO ()
 steps table ts = do
   putStrLn $ "               Input               Stack              Output   Rule"
   let sh = iterate (step table) $ initial ts
   let l = length $ takeWhile (not . isDone) sh
   mapM_ (putStrLn . show) (take (l + 1) sh)
 
-initial :: [Tree] -> Shunt
+initial :: [Tree a] -> Shunt a
 initial ts = S ts [] [[]] Initial
 
 -- | Parse a list of tokens according to an operator table.
-shunt :: Table -> [Tree] -> Either Failure Tree
+shunt :: Shuntable a => Table a -> [Tree a] -> Either (Failure a) (Tree a)
 shunt table ts = case fix $ initial ts of
   S [] [] [[o']] (Done Success) -> Right o'
   S _ _ _ (Done (Failure f)) -> Left f
@@ -145,7 +147,7 @@ shunt table ts = case fix $ initial ts of
   where fix s = let s' = step table s in
                 if isDone s' then s' else fix s'
 
-step :: Table -> Shunt -> Shunt
+step :: Shuntable a => Table a -> Shunt a -> Shunt a
 
 -- There is a complete Closed or Postifx operator on the top of the stack.
 step _ (S tt (s@(Part y):ss) oo@(os:oss) _) | end y && (not $ rightHole y)
@@ -192,7 +194,7 @@ step table sh@(S tt@(t@(Sym x):ts) st@(s@(Part y):ss) oo@(os:oss) ru) =
       S ts (Part pt1:st) ([]:oo) StackL
       | rightHoleKind y == Just SExpression && pt1 `continue` y && stackedOp ru =
       -- build the () symbol
-      S (Sym (concat $ previousPart pt1++[x]):ts) ss oss MakeInert
+      S (Sym (operator $ previousPart pt1++[x]):ts) ss oss MakeInert
       | rightHoleKind y == Just SExpression && pt1 `continue` y =
       let (os':h:oss') = oo
           ap = Node (reverse os')
@@ -233,13 +235,13 @@ step table sh@(S (t:ts) [] oo ru) = case t of
   Sym x -> case findBegin table x of
     NoBegin   -> S ts [t] ([]:oo) StackApp
     -- x is the first sub-op, and the stack is empty
-    Begin pt1 -> go x pt1
+    Begin pt1 -> go pt1
     MissingBegin xs -> rule sh (failure $ xs `MissingBefore` x)
   Part _ -> error "can't happen: but TODO make a specifi data type for the input stack"
   where
-    go x pt1
+    go pt1
       | leftHole pt1 && ru == Initial =
-      rule sh (failure $ MissingSubBefore x)
+      rule sh (failure $ MissingSubBefore $ partSymbol pt1)
       | leftHole pt1 =
       S ts [Part pt1] oo StackOp
       | rightHoleKind pt1 == Just SExpression =
@@ -253,12 +255,12 @@ step _ sh@(S [] [] [[_]] _) = rule sh $ Done Success
 -- This equation should never be reached; otherwise it is a bug.
 step _ sh = rule sh (failure Unexpected)
 
-apply :: Tree -> [[Tree]] -> [[Tree]]
+apply :: Tree a -> [[Tree a]] -> [[Tree a]]
 apply s@(Part y) (os:oss) =
   if length l < nargs
   -- TODO this error case should probably be discovered earlier,
   -- so hitting this point should be a bug.
-  then error $ "not enough arguments supplied to " ++ show y
+  then error $ "not enough arguments supplied to " -- TODO ++ show y
   else (Node (s:reverse l) : r) : oss
   where nargs = arity y
         (l,r) = splitAt nargs os
@@ -266,5 +268,5 @@ apply s@(Sym _) (os:h:oss) =  (ap:h):oss
   where ap = if null os then s else Node (s:reverse os)
 apply s@(Node _) (os:h:oss) =  (ap:h):oss
   where ap = if null os then s else Node (s:reverse os)
-apply s oss = error $ "can't apply " ++ show s ++ " to " ++ show oss
+apply s oss = error $ "can't apply " -- TODO ++ show s ++ " to " ++ show oss
 

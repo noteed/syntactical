@@ -3,7 +3,7 @@ module Holes where
 import Text.Syntactical
 import Text.Syntactical.Data
 
-table :: Table
+table :: Table String
 table = buildTable
  [ [ closed_ "(" [] ")" Distfix
    , closed_ "⟨" [] "⟩" SExpression
