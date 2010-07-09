@@ -26,7 +26,7 @@ module Text.Syntactical.Yard
   ) where
 
 import Text.Syntactical.Data (
-  Shuntable, operator,
+  Token, operator,
   Tree(..), Op(..), Kind(..), Table,
   begin, end, leftHole, rightHole, rightHoleKind, discard,
   applicator, continue, lower,
@@ -100,7 +100,7 @@ initial :: [Tree a] -> Shunt a
 initial ts = S ts [] [[]] Initial
 
 -- | Parse a list of tokens according to an operator table.
-shunt :: Shuntable a => Table a -> [Tree a] -> Either (Failure a) (Tree a)
+shunt :: Token a => Table a -> [Tree a] -> Either (Failure a) (Tree a)
 shunt table ts = case fix $ initial ts of
   S [] [] [[o']] (Done Success) -> Right o'
   S _ _ _ (Done (Failure f)) -> Left f
@@ -108,7 +108,7 @@ shunt table ts = case fix $ initial ts of
   where fix s = let s' = step table s in
                 if isDone s' then s' else fix s'
 
-step :: Shuntable a => Table a -> Shunt a -> Shunt a
+step :: Token a => Table a -> Shunt a -> Shunt a
 
 -- There is a complete Closed or Postifx operator on the top of the stack.
 step _ (S tt (s@(Part y):ss) oo@(os:oss) _) | end y && (not $ rightHole y)
