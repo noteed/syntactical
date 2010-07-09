@@ -22,10 +22,8 @@
 -- function seems a good place to implement such restriction.
 
 module Text.Syntactical.Yard
-  ( shunt, steps, Failure(..), showFailure
+  ( Shunt(..), initial, isDone, shunt, step, Failure(..)
   ) where
-
-import Data.List (intersperse)
 
 import Text.Syntactical.Data (
   Shuntable, operator,
@@ -80,26 +78,6 @@ isDone :: Shunt a -> Bool
 isDone (S _ _ _ (Done _)) = True
 isDone _ = False
 
--- | Give a textual representation of a 'Failure'.
-showFailure :: Failure String -> String
-showFailure f = case f of
-  MissingBefore ps p ->
-    "Parse error: missing operator parts " ++
-    concatMap (\pt -> concat (intersperse " " pt)) ps ++ " before " ++ p
-  MissingAfter p ps ->
-    "Parse error: missing operator part " ++
-    concat (intersperse ", " p) ++ " after " ++ concat (intersperse " " ps)
-  CantMix a b ->
-     "Parse error: cannot mix operators " ++ show a ++ " and " ++ show b
-  MissingSubBetween a b ->
-    "Parse error: no sub-expression between " ++ a ++ " and " ++ b
-  MissingSubBefore a ->
-    "Parse error: no sub-expression before " ++ a
-  MissingSubAfter a ->
-    "Parse error: no sub-expression after " ++ a
-  Unexpected ->
-    "Parsing raised a bug"
-
 failure :: Failure a -> Rule a
 failure f = Done $ Failure f
 
@@ -117,23 +95,6 @@ data Shunt a = S
 
 rule :: Shunt a -> Rule a -> Shunt a
 rule (S tt st oo _) ru = S tt st oo ru
-
-instance Show a => Show (Shunt a) where
-    show _ = "TODO show (Shunt a)" -- Make a Show module with a ShowShuntable class.
---  show (S ts ss os ru) =
---    pad 20 ts ++ pad 20 ss ++ pad 20 os ++ "   " ++ show ru
-
-pad :: Show a => Int -> a -> [Char]
-pad n s = let s' = show s in replicate (n - length s') ' ' ++ s'
-
--- | Similar to the 'shunt' function but print the steps
--- performed by the modified shunting yard algorithm.
-steps :: (Show a, Shuntable a) => Table a -> [Tree a] -> IO ()
-steps table ts = do
-  putStrLn $ "               Input               Stack              Output   Rule"
-  let sh = iterate (step table) $ initial ts
-  let l = length $ takeWhile (not . isDone) sh
-  mapM_ (putStrLn . show) (take (l + 1) sh)
 
 initial :: [Tree a] -> Shunt a
 initial ts = S ts [] [[]] Initial
