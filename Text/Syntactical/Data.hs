@@ -17,8 +17,8 @@ data SExpr a = List [SExpr a]
 
 -- The s-expression data type, abstracting over the token type,
 -- augmented to represent parts (used in the operator stack).
-data Tree a = Node [Tree a]
-            | Sym a
+data Tree a = Branch [Tree a]
+            | Leaf a
             | Part (Part a)
   deriving (Eq, Show)
 
@@ -107,8 +107,8 @@ applicator table (Atom x) = findParts table x == []
 applicator _ (List _) = True
 
 applicator' :: Token a => Table a -> Tree a -> Bool
-applicator' table (Sym x) = findParts table x == []
-applicator' _ (Node _) = True
+applicator' table (Leaf x) = findParts table x == []
+applicator' _ (Branch _) = True
 applicator' _ _ = False
 
 findContinuing :: Token a => [Part a] -> Part a -> Maybe (Part a)

@@ -35,13 +35,13 @@ import Text.Syntactical.Data (
 
 -- convert a SExpr to a Tree
 s2t :: SExpr a -> Tree a
-s2t (Atom x) = Sym x
-s2t (List xs) = Node $ map s2t xs
+s2t (Atom x) = Leaf x
+s2t (List xs) = Branch $ map s2t xs
 
 -- convert a Tree to a SExpr (partial function)
 t2s :: Tree a -> SExpr a
-t2s (Sym x) = Atom x
-t2s (Node xs) = List $ map t2s xs
+t2s (Leaf x) = Atom x
+t2s (Branch xs) = List $ map t2s xs
 t2s (Part _) = error "can't convert a Tree Part to a SExpr" -- operator is used in this case
 
 -- An applicator is a non-operator symbol that is applied
@@ -134,8 +134,8 @@ step table (S (t:ts) st@(s:_) oo@(os:oss) _)
       S ts st ((t:os):oss) SExpr
     | otherwise ->
       S ts (s2t t:st) ([]:oo) StackApp
-  Sym _                        -> S ts st ((t:os):oss) Inert
-  Node _                       -> S ts st ((t:os):oss) Inert
+  Leaf _                       -> S ts st ((t:os):oss) Inert
+  Branch _                     -> S ts st ((t:os):oss) Inert
 
 -- An operator part is on the input stack and an applicator is on
 -- the stack.
@@ -187,8 +187,8 @@ step table sh@(S tt@(t@(Atom x):ts) st@(s@(Part y):ss) oo@(os:oss) ru) =
 -- No more tokens on the input stack, just have to flush
 -- the remaining applicators and/or operators.
 step _ sh@(S [] (s:ss) oo ru) = case s of
-  Sym _              -> S [] ss (apply s oo) FlushApp
-  Node _             -> S [] ss (apply s oo) FlushApp
+  Leaf _             -> S [] ss (apply s oo) FlushApp
+  Branch _           -> S [] ss (apply s oo) FlushApp
   Part y | end y && rightHole y && stackedOp ru ->
     rule sh (failure $ MissingSubAfter $ partSymbol y)
     -- The infix or prefix operator has all its parts.
@@ -234,9 +234,9 @@ apply (Part y) (os:oss) =
   else (List (operator y:reverse l) : r) : oss
   where nargs = arity y
         (l,r) = splitAt nargs os
-apply (Sym x) (os:h:oss) =  (ap:h):oss
+apply (Leaf x) (os:h:oss) =  (ap:h):oss
   where ap = if null os then Atom x else List (Atom x:reverse os)
-apply (Node xs) (os:h:oss) =  (ap:h):oss
+apply (Branch xs) (os:h:oss) =  (ap:h):oss
   where ap = if null os then List (map t2s xs) else List (List (map t2s xs):reverse os)
 apply _ _ = error "can't happen"
 

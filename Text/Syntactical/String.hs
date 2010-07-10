@@ -51,10 +51,10 @@ showShunt (S ts ss os ru) =
 showTree :: Tree String -> String
 showTree = tail . f
   where
-  f (Sym s) = ' ' : s
+  f (Leaf s) = ' ' : s
   f (Part y) = ' ' : concat (previousPart y ++ [partSymbol y])
-  f (Node []) = ' ' : "⟨⟩"
-  f (Node es) = ' ' : '⟨' : tail (concatMap f es) ++ "⟩"
+  f (Branch []) = ' ' : "⟨⟩"
+  f (Branch es) = ' ' : '⟨' : tail (concatMap f es) ++ "⟩"
 
 showSExpr :: SExpr String -> String
 showSExpr = tail . f
