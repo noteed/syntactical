@@ -14,6 +14,7 @@ import Data.List
 
 data SExpr a = List [SExpr a]
              | Atom a
+  deriving (Eq, Show)
 
 -- The s-expression data type, abstracting over the token type,
 -- augmented to represent parts (used in the operator stack).
