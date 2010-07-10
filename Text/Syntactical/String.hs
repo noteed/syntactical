@@ -1,19 +1,14 @@
-{-# Language TypeSynonymInstances #-}
--- Make String an (orphan) instance of Token. Give also a 'steps' function
--- to show the modified shunting-yard algorithm steps.
+-- This module provides a 'steps' function to show the steps
+-- of the modified sunting-yard algorithm on Strings.
 module Text.Syntactical.String where
 
 import Data.List (intersperse)
 
 import Text.Syntactical.Data (
-  Token, operator,
   Tree(..), Table,
   partSymbol, previousPart
   )
 import Text.Syntactical.Yard (Shunt(..), initial, isDone, step, Failure(..))
-
-instance Token String where
-  operator = concat
 
 -- | Similar to the 'shunt' function but print the steps
 -- performed by the modified shunting yard algorithm.
@@ -53,16 +48,20 @@ showTree = tail . f
   where
   f (Sym s) = ' ' : s
   f (Part y) = ' ' : concat (previousPart y ++ [partSymbol y])
+  f (Node []) = ' ' : "⟨⟩"
   f (Node es) = ' ' : '⟨' : tail (concatMap f es) ++ "⟩"
+
+bracket :: [String] -> String
+bracket s = "[" ++ (concat . intersperse ",") s ++ "]"
 
 pad :: Int -> [Tree String] -> String
 pad n s =
-  let s' = concat . (intersperse ", ") . map showTree $ s
+  let s' = bracket . map showTree $ s
   in replicate (n - length s') ' ' ++ s'
 
 pads :: Int -> [[Tree String]] -> String
 pads n s =
-  let s' = concat . (intersperse ", ") .
-        map (concat . (intersperse ", ") . map showTree) $ s
+  let s' = bracket .
+        map (bracket . map showTree) $ s
   in replicate (n - length s') ' ' ++ s'
 

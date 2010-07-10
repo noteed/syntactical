@@ -26,7 +26,6 @@ module Text.Syntactical.Yard
   ) where
 
 import Text.Syntactical.Data (
-  Token, operator,
   Tree(..), Op(..), Kind(..), Table,
   begin, end, leftHole, rightHole, rightHoleKind, discard,
   applicator, continue, lower,
@@ -100,7 +99,7 @@ initial :: [Tree a] -> Shunt a
 initial ts = S ts [] [[]] Initial
 
 -- | Parse a list of tokens according to an operator table.
-shunt :: Token a => Table a -> [Tree a] -> Either (Failure a) (Tree a)
+shunt :: Eq a => Table a -> [Tree a] -> Either (Failure a) (Tree a)
 shunt table ts = case fix $ initial ts of
   S [] [] [[o']] (Done Success) -> Right o'
   S _ _ _ (Done (Failure f)) -> Left f
@@ -108,7 +107,7 @@ shunt table ts = case fix $ initial ts of
   where fix s = let s' = step table s in
                 if isDone s' then s' else fix s'
 
-step :: Token a => Table a -> Shunt a -> Shunt a
+step :: Eq a => Table a -> Shunt a -> Shunt a
 
 -- There is a complete Closed or Postifx operator on the top of the stack.
 step _ (S tt (s@(Part y):ss) oo@(os:oss) _) | end y && (not $ rightHole y)
@@ -154,8 +153,8 @@ step table sh@(S tt@(t@(Sym x):ts) st@(s@(Part y):ss) oo@(os:oss) ru) =
       | rightHoleKind pt1 == Just SExpression =
       S ts (Part pt1:st) ([]:oo) StackL
       | rightHoleKind y == Just SExpression && pt1 `continue` y && stackedOp ru =
-      -- build the () symbol
-      S (Sym (operator $ previousPart pt1++[x]):ts) ss oss MakeInert
+      let ([]:h:oss') = oo
+      in S ts (Part pt1:ss) ((Node []:h):oss') MatchedR
       | rightHoleKind y == Just SExpression && pt1 `continue` y =
       let (os':h:oss') = oo
           ap = Node (reverse os')
