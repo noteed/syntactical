@@ -1,21 +1,31 @@
 module Text.Syntactical.Data (
-  Tree(..), Op(..), Opening(..), Associativity(..), Kind(..), Table,
+  SExpr(..), Tree(..), Op(..), Opening(..), Associativity(..), Kind(..), Table,
   infx, prefx, postfx, closed, closed_,
   buildTable,
   begin, end, leftHole, rightHole, rightHoleKind, discard,
-  applicator, continue, lower,
+  applicator, applicator', continue, lower,
   arity, partSymbol, nextPart, previousPart,
-  findBoth, findBegin, FindBegin(..)
+  findBoth, findBegin, FindBegin(..),
+  Token ,operator
   ) where
 
 import Data.List
 --import qualified Data.Map as M
 
--- The s-expression data type, abstracting over the token type.
+data SExpr a = List [SExpr a]
+             | Atom a
+
+-- The s-expression data type, abstracting over the token type,
+-- augmented to represent parts (used in the operator stack).
 data Tree a = Node [Tree a]
-           | Sym a
-           | Part (Part a) -- on the stack, TODO turn into Sym on the output
+            | Sym a
+            | Part (Part a)
   deriving (Eq, Show)
+
+-- The Eq constraint is necessary to lookup operator part in the
+-- table.
+class Eq a => Token a where
+  operator :: Part a -> SExpr a
 
 -- The boolean is to specify if the operator should show up
 -- in the result or be discarded. The opening further specifies
@@ -89,15 +99,19 @@ lower pt1 pt2 = case (associativity pt1, associativity pt2) of
           | a1 == NonAssociative && p1 <= p2 = True
           | otherwise = False
 
-findParts :: Eq a => Table a -> a -> [Part a]
+findParts :: Token a => Table a -> a -> [Part a]
 findParts (Table ps) x = filter ((==x) . partSymbol) ps
 
-applicator :: Eq a => Table a -> Tree a -> Bool
-applicator table (Sym x) = findParts table x == []
-applicator _ (Node _) = True
-applicator _ _ = False
+applicator :: Token a => Table a -> SExpr a -> Bool
+applicator table (Atom x) = findParts table x == []
+applicator _ (List _) = True
 
-findContinuing :: Eq a => [Part a] -> Part a -> Maybe (Part a)
+applicator' :: Token a => Table a -> Tree a -> Bool
+applicator' table (Sym x) = findParts table x == []
+applicator' _ (Node _) = True
+applicator' _ _ = False
+
+findContinuing :: Token a => [Part a] -> Part a -> Maybe (Part a)
 findContinuing xs y = case as of
   [] -> Nothing
   (a:_) -> Just $ if isLast a then groupLast as else groupMiddle as
@@ -125,7 +139,7 @@ findIncompletePart table (_:ss) = findIncompletePart table ss
 -- find, even if it is not First; one of the rules will
 -- generate a MissingBefore (in the [] case) or an Incomplete
 -- (in the pts2 case).
-findBoth :: Eq a => Table a -> a -> [Tree a] -> Either (Part a) (FindBegin a)
+findBoth :: Token a => Table a -> a -> [Tree a] -> Either (Part a) (FindBegin a)
 findBoth table x st = case findIncompletePart table st of
   Nothing -> Right $ findBegin table x
   Just y -> case findContinuing xs y of
@@ -142,7 +156,7 @@ filterParts pts = (filter isLone pts, filter isFirst pts,
 -- MissingBegin: no begin part found but continuing part found.
 data FindBegin a = NoBegin | Begin (Part a) | MissingBegin [[a]]
 
-findBegin :: Eq a => Table a -> a -> FindBegin a
+findBegin :: Token a => Table a -> a -> FindBegin a
 findBegin table x = case filterParts $ findParts table x of
   ([],[],[],[]) -> NoBegin
   ((_:_),(_:_),_,_) -> error "findBegin: ambiguous: lone or first part"
@@ -157,7 +171,7 @@ groupLone [pt] = pt
 groupLone [] = error "groupLone: empty list"
 groupLone _ = error "groupLone: ambiguous lone part, only one allowed"
 
-groupFirst :: Eq a => [Part a] -> Part a
+groupFirst :: Token a => [Part a] -> Part a
 groupFirst [] = error "groupFirst: empty list"
 groupFirst (First a' x s' k':pts) = go a' s' k' pts
   where go a s k [] = First a x s k
@@ -166,7 +180,7 @@ groupFirst (First a' x s' k':pts) = go a' s' k' pts
         go _ _ _ _ = error "groupFirst: ambiguous first parts"
 groupFirst _ = error "groupFirst: not a First part"
 
-groupMiddle :: Eq a => [Part a] -> Part a
+groupMiddle :: Token a => [Part a] -> Part a
 groupMiddle [] = error "groupMiddle: empty list"
 groupMiddle (Middle ss' x s' k':pts) = go ss' s' k' pts
   where go ss s k [] = Middle ss x s k
@@ -303,7 +317,7 @@ previousPart (Last _ l _ _ _) = l
 previousPart (Lone _ _ _ _) = []
 previousPart (Middle l _ _ _) = l
 
-continue :: Eq a => Part a -> Part a -> Bool
+continue :: Token a => Part a -> Part a -> Bool
 continue x y = previousPart x == previousPart y ++ [partSymbol y]
 
 cut :: Op a -> [Part a]

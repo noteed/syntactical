@@ -271,11 +271,11 @@ checkTests table l = mapM_ (check table) l
 check table (i,o) =
   let ts = tokenize i in case shunt table ts of
   Right o' ->
-    if o == showTree o'
+    if o == showSExpr o'
     then return ()
     else do putStrLn $ "FAIL: input: " ++ i
               ++ ", expected: " ++ o
-              ++ ", computed: " ++ showTree o'
+              ++ ", computed: " ++ showSExpr o'
             steps table ts
   _ -> do putStrLn $ "FAIL: input: " ++ i
             ++ ", expected: " ++ o
@@ -292,7 +292,7 @@ separate' ('⟩':cs) = " ⟩ " ++ separate' cs
 separate' (c:cs) = c : separate' cs
 separate' [] = []
 
-token = Sym
+token = Atom
 
 -- 
 
@@ -315,10 +315,10 @@ testYard = testGroup "Text.Syntactical.Yard"
 -- Apply the parser p to i and check if it returns
 -- the expected value o.
 helper p (i,o) = testCase i $ case p i of
-  Right o' -> o @=? showTree o'
+  Right o' -> o @=? showSExpr o'
   Left err -> assertFailure $ "cannot parse: " ++ show err
 
 helper' p (i,o) = testCase i $ case p i of
-  Right o' -> assertFailure $ "unexpected successful parse: " ++ showTree o'
+  Right o' -> assertFailure $ "unexpected successful parse: " ++ showSExpr o'
   Left o' -> o @=? o'
 

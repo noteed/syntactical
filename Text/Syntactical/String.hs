@@ -1,3 +1,4 @@
+{-# Language TypeSynonymInstances #-}
 -- This module provides a 'steps' function to show the steps
 -- of the modified sunting-yard algorithm on Strings.
 module Text.Syntactical.String where
@@ -5,14 +6,18 @@ module Text.Syntactical.String where
 import Data.List (intersperse)
 
 import Text.Syntactical.Data (
-  Tree(..), Table,
-  partSymbol, previousPart
+  SExpr(..), Tree(..), Table,
+  partSymbol, previousPart,
+  Token, operator
   )
 import Text.Syntactical.Yard (Shunt(..), initial, isDone, step, Failure(..))
 
+instance Token String where
+  operator pt = Atom . concat $ previousPart pt ++ [partSymbol pt]
+
 -- | Similar to the 'shunt' function but print the steps
 -- performed by the modified shunting yard algorithm.
-steps :: Table String -> [Tree String] -> IO ()
+steps :: Table String -> [SExpr String] -> IO ()
 steps table ts = do
   putStrLn $ "               Input               Stack              Output   Rule"
   let sh = iterate (step table) $ initial ts
@@ -41,7 +46,7 @@ showFailure f = case f of
 
 showShunt :: Shunt String -> String
 showShunt (S ts ss os ru) =
-  pad 20 ts ++ pad 20 ss ++ pads 20 os ++ "   " ++ show ru
+  pad 20 ts ++ pad' 20 ss ++ pads 20 os ++ "   " ++ show ru
 
 showTree :: Tree String -> String
 showTree = tail . f
@@ -51,17 +56,29 @@ showTree = tail . f
   f (Node []) = ' ' : "⟨⟩"
   f (Node es) = ' ' : '⟨' : tail (concatMap f es) ++ "⟩"
 
+showSExpr :: SExpr String -> String
+showSExpr = tail . f
+  where
+  f (Atom s) = ' ' : s
+  f (List []) = ' ' : "⟨⟩"
+  f (List es) = ' ' : '⟨' : tail (concatMap f es) ++ "⟩"
+
 bracket :: [String] -> String
 bracket s = "[" ++ (concat . intersperse ",") s ++ "]"
 
-pad :: Int -> [Tree String] -> String
-pad n s =
+pad' :: Int -> [Tree String] -> String
+pad' n s =
   let s' = bracket . map showTree $ s
   in replicate (n - length s') ' ' ++ s'
 
-pads :: Int -> [[Tree String]] -> String
+pad :: Int -> [SExpr String] -> String
+pad n s =
+  let s' = bracket . map showSExpr $ s
+  in replicate (n - length s') ' ' ++ s'
+
+pads :: Int -> [[SExpr String]] -> String
 pads n s =
   let s' = bracket .
-        map (bracket . map showTree) $ s
+        map (bracket . map showSExpr) $ s
   in replicate (n - length s') ' ' ++ s'
 

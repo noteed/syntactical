@@ -5,7 +5,6 @@
 
 -- TODO make sure the rules reflect what's going on, a same
 -- rule should be associated to a same behavior.
--- TODO factorize
 -- TODO is ! a + b allowed if ! and + have the same precedence?
 -- TODO allow specific operator table for internal operator holes
 -- (e.g. to reuse a same symbol with different fixity/precedecence).
@@ -26,12 +25,24 @@ module Text.Syntactical.Yard
   ) where
 
 import Text.Syntactical.Data (
-  Tree(..), Op(..), Kind(..), Table,
+  SExpr(..), Tree(..), Op(..), Kind(..), Table,
   begin, end, leftHole, rightHole, rightHoleKind, discard,
-  applicator, continue, lower,
+  applicator, applicator', continue, lower,
   arity, partSymbol, nextPart, previousPart,
-  findBoth, findBegin, FindBegin(..)
+  findBoth, findBegin, FindBegin(..),
+  Token, operator
   )
+
+-- convert a SExpr to a Tree
+s2t :: SExpr a -> Tree a
+s2t (Atom x) = Sym x
+s2t (List xs) = Node $ map s2t xs
+
+-- convert a Tree to a SExpr (partial function)
+t2s :: Tree a -> SExpr a
+t2s (Sym x) = Atom x
+t2s (Node xs) = List $ map t2s xs
+t2s (Part _) = error "can't convert a Tree Part to a SExpr" -- operator is used in this case
 
 -- An applicator is a non-operator symbol that is applied
 -- to some arguments. When such a symbol is read, it is
@@ -87,19 +98,19 @@ stackedOp ContinueOp = True
 stackedOp _ = False
 
 data Shunt a = S
-  [Tree a]   -- list of tokens (Nodes can be pushed back.)
-  [Tree a]   -- stack of operators and applicators
-  [[Tree a]] -- stack of stacks
+  [SExpr a]   -- list of tokens (Nodes can be pushed back.)
+  [Tree a]    -- stack of operators and applicators
+  [[SExpr a]] -- stack of stacks
   (Rule a)
 
 rule :: Shunt a -> Rule a -> Shunt a
 rule (S tt st oo _) ru = S tt st oo ru
 
-initial :: [Tree a] -> Shunt a
+initial :: [SExpr a] -> Shunt a
 initial ts = S ts [] [[]] Initial
 
 -- | Parse a list of tokens according to an operator table.
-shunt :: Eq a => Table a -> [Tree a] -> Either (Failure a) (Tree a)
+shunt :: Token a => Table a -> [SExpr a] -> Either (Failure a) (SExpr a)
 shunt table ts = case fix $ initial ts of
   S [] [] [[o']] (Done Success) -> Right o'
   S _ _ _ (Done (Failure f)) -> Left f
@@ -107,7 +118,7 @@ shunt table ts = case fix $ initial ts of
   where fix s = let s' = step table s in
                 if isDone s' then s' else fix s'
 
-step :: Eq a => Table a -> Shunt a -> Shunt a
+step :: Token a => Table a -> Shunt a -> Shunt a
 
 -- There is a complete Closed or Postifx operator on the top of the stack.
 step _ (S tt (s@(Part y):ss) oo@(os:oss) _) | end y && (not $ rightHole y)
@@ -122,14 +133,14 @@ step table (S (t:ts) st@(s:_) oo@(os:oss) _)
     | rightHoleKind y == Just SExpression ->
       S ts st ((t:os):oss) SExpr
     | otherwise ->
-      S ts (t:st) ([]:oo) StackApp
+      S ts (s2t t:st) ([]:oo) StackApp
   Sym _                        -> S ts st ((t:os):oss) Inert
   Node _                       -> S ts st ((t:os):oss) Inert
 
 -- An operator part is on the input stack and an applicator is on
 -- the stack.
-step table (S tt@((Sym x):ts) st@(s:ss) oo _)
-  | applicator table s =
+step table (S tt@((Atom x):ts) st@(s:ss) oo _)
+  | applicator' table s =
   case findBoth table x st of
     Right (Begin pt1)
       | not (leftHole pt1) && rightHoleKind pt1 == Just SExpression ->
@@ -140,7 +151,7 @@ step table (S tt@((Sym x):ts) st@(s:ss) oo _)
       S tt ss (apply s oo) FlushApp
 
 -- An operator part is on the input stack and on the stack.
-step table sh@(S tt@(t@(Sym x):ts) st@(s@(Part y):ss) oo@(os:oss) ru) =
+step table sh@(S tt@(t@(Atom x):ts) st@(s@(Part y):ss) oo@(os:oss) ru) =
   case findBoth table x st of
     Left pt1 -> go pt1
     Right (Begin pt1) -> go pt1
@@ -154,10 +165,10 @@ step table sh@(S tt@(t@(Sym x):ts) st@(s@(Part y):ss) oo@(os:oss) ru) =
       S ts (Part pt1:st) ([]:oo) StackL
       | rightHoleKind y == Just SExpression && pt1 `continue` y && stackedOp ru =
       let ([]:h:oss') = oo
-      in S ts (Part pt1:ss) ((Node []:h):oss') MatchedR
+      in S ts (Part pt1:ss) ((List []:h):oss') MatchedR
       | rightHoleKind y == Just SExpression && pt1 `continue` y =
       let (os':h:oss') = oo
-          ap = Node (reverse os')
+          ap = List (reverse os')
       in S ts (Part pt1:ss) ((ap:h):oss') MatchedR
       | rightHoleKind y == Just SExpression =
       S ts st ((t:os):oss) SExpr
@@ -191,13 +202,12 @@ step _ sh@(S [] (s:ss) oo ru) = case s of
 
 -- The applicator/operator stack is empty.
 step table sh@(S (t:ts) [] oo ru) = case t of
-  Node _ -> S ts [t] ([]:oo) StackApp
-  Sym x -> case findBegin table x of
-    NoBegin   -> S ts [t] ([]:oo) StackApp
+  List _ -> S ts [s2t t] ([]:oo) StackApp
+  Atom x -> case findBegin table x of
+    NoBegin   -> S ts [s2t t] ([]:oo) StackApp
     -- x is the first sub-op, and the stack is empty
     Begin pt1 -> go pt1
     MissingBegin xs -> rule sh (failure $ xs `MissingBefore` x)
-  Part _ -> error "can't happen: but TODO make a specifi data type for the input stack"
   where
     go pt1
       | leftHole pt1 && ru == Initial =
@@ -215,18 +225,18 @@ step _ sh@(S [] [] [[_]] _) = rule sh $ Done Success
 -- This equation should never be reached; otherwise it is a bug.
 step _ sh = rule sh (failure Unexpected)
 
-apply :: Tree a -> [[Tree a]] -> [[Tree a]]
-apply s@(Part y) (os:oss) =
+apply :: Token a => Tree a -> [[SExpr a]] -> [[SExpr a]]
+apply (Part y) (os:oss) =
   if length l < nargs
   -- TODO this error case should probably be discovered earlier,
   -- so hitting this point should be a bug.
   then error $ "not enough arguments supplied to " -- TODO ++ show y
-  else (Node (s:reverse l) : r) : oss
+  else (List (operator y:reverse l) : r) : oss
   where nargs = arity y
         (l,r) = splitAt nargs os
-apply s@(Sym _) (os:h:oss) =  (ap:h):oss
-  where ap = if null os then s else Node (s:reverse os)
-apply s@(Node _) (os:h:oss) =  (ap:h):oss
-  where ap = if null os then s else Node (s:reverse os)
-apply s oss = error $ "can't apply " -- TODO ++ show s ++ " to " ++ show oss
+apply (Sym x) (os:h:oss) =  (ap:h):oss
+  where ap = if null os then Atom x else List (Atom x:reverse os)
+apply (Node xs) (os:h:oss) =  (ap:h):oss
+  where ap = if null os then List (map t2s xs) else List (List (map t2s xs):reverse os)
+apply _ _ = error "can't happen"
 
