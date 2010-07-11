@@ -53,3 +53,22 @@ Current state
 The library works but is still a bit rough. Tests don't cover enough cases and
 it is simple to overlook one. Documentation is missing (but a look at
 tests/Simple is enough to start).
+
+Future and/or wishes
+--------------------
+
+- Make a version of the modified shunting-yard exposed as Parsec's
+  buildExpressionParser, i.e. the base token (or term) is specified by a
+  user-sipplied parser, with functions used to build the tree.
+- Allow arbitray parsers to be used in holes, in addition of the SExpression
+  and Distfix kinds of holes currently available.
+- Allow a new kind of hole called Repeat or Repetition or List (but List is a
+  constructor in the Tree data type). That new kind of hole allows a (possibly
+  empty) list of sub-expressions to appear in the hole, separated by an
+  operator part. E.g. closed "[" (Repeat ",") "]" would allow [ ], [ a ],
+  [ a , b ], [ a, b, c ] and so on. The result would be respectively ⟨[,] ⟨⟩⟩,
+  ⟨[,] ⟨a⟩⟩, ⟨[,] ⟨a b⟩⟩, ⟨[,] ⟨a b c⟩⟩ and so on. It should also be possible
+  to use closed "[" (Repeat ";") "]" and closed "[" (Repeat ",") "]" in the
+  same operator table. The [,] (and [;]) would be user-constructed by adding a
+  'list' method to the Token class.
+
