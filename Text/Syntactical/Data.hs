@@ -1,6 +1,8 @@
 module Text.Syntactical.Data (
   SExpr(..), Tree(..), Op(..), Opening(..), Associativity(..), Kind(..), Table,
-  infx, prefx, postfx, closed, closed_,
+  infx, prefx, postfx, closed,
+  infx_, prefx_, postfx_, closed_,
+  sexpr, distfix,
   buildTable,
   begin, end, leftHole, rightHole, rightHoleKind, discard,
   applicator, applicator', continue, lower,
@@ -57,21 +59,38 @@ type Precedence = Int
 
 newtype Table a = Table [Part a]
 
-infx :: a -> [a] -> Associativity -> Op a
+infx :: Associativity -> a -> Op a
 -- TODO the associativity is present twice
-infx f rest a = Op1 True f (zip (repeat Distfix) rest) (BothOpen a) a 0
+infx a f = Op1 True f [] (BothOpen a) a 0
 
-prefx :: a -> [a] -> Op a
-prefx f rest = Op1 True f (zip (repeat Distfix) rest) (RightOpen True) RightAssociative 0
+infx_ :: Associativity -> a -> Op a
+infx_ a f = Op1 False f [] (BothOpen a) a 0
 
-postfx :: a -> [a] -> Op a
-postfx f rest = Op1 True f (zip (repeat Distfix) rest) (LeftOpen True) RightAssociative 0
+prefx :: a -> Op a
+prefx f = Op1 True f [] (RightOpen True) RightAssociative 0
 
-closed :: a -> [a] -> a -> Kind -> Op a
-closed f rest l k = Op2 True f (zip (repeat k) rest) k l
+prefx_ :: a -> Op a
+prefx_ f = Op1 False f [] (RightOpen True) RightAssociative 0
 
-closed_ :: a -> [a] -> a -> Kind -> Op a
-closed_ f rest l k = Op2 False f (zip (repeat k) rest) k l
+postfx :: a -> Op a
+postfx f = Op1 True f [] (LeftOpen True) RightAssociative 0
+
+postfx_ :: a -> Op a
+postfx_ f = Op1 False f [] (LeftOpen True) RightAssociative 0
+
+closed :: a -> Kind -> a -> Op a
+closed f k l = Op2 True f [] k l
+
+closed_ :: a -> Kind -> a -> Op a
+closed_ f k l = Op2 False f [] k l
+
+sexpr :: Op a -> a -> Op a
+sexpr (Op1 keep x rest opening a p) y = Op1 keep x (rest++[(SExpression,y)]) opening a p
+sexpr (Op2 keep x rest k y) z = Op2 keep x (rest++[(k,y)]) SExpression z
+
+distfix :: Op a -> a -> Op a
+distfix (Op1 keep x rest opening a p) y = Op1 keep x (rest++[(Distfix,y)]) opening a p
+distfix (Op2 keep x rest k y) z = Op2 keep x (rest++[(k,y)]) Distfix z
 
 setPrecedence :: Precedence -> Op a -> Op a
 setPrecedence p (Op1 keep x xs opening a _) = Op1 keep x xs opening a p

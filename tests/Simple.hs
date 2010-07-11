@@ -13,46 +13,46 @@ import qualified Holes
 
 table0 :: Table String
 table0 = buildTable
- [ [ closed_ "(" [] ")" Distfix
-   , closed_ "⟨" [] "⟩" SExpression
-   , closed "</" []"/>" Distfix
-   , closed "[" ["|"] "]" Distfix
-   , closed "{" [] "}" Distfix
+ [ [ closed_ "(" Distfix ")"
+   , closed_ "⟨" SExpression "⟩"
+   , closed "</" Distfix"/>"
+   , closed "[" Distfix "|" `distfix` "]"
+   , closed "{" Distfix "}"
    ]
- , [ infx "?'" [":'"] RightAssociative
-   , postfx "!" []
-   , postfx "_/" ["/."]
+ , [ infx RightAssociative "?'" `distfix` ":'"
+   , postfx "!"
+   , postfx "_/" `distfix` "/."
    ]
- , [ postfx "%" []
-   , prefx "#" []
+ , [ postfx "%"
+   , prefx "#"
    ]
- , [ postfx "°" []
-   , infx "*" [] LeftAssociative
-   , infx "/" [] LeftAssociative
+ , [ postfx "°"
+   , infx LeftAssociative "*"
+   , infx LeftAssociative "/"
    ]
- , [ infx "+" [] LeftAssociative
-   , infx "-" [] LeftAssociative
+ , [ infx LeftAssociative "+"
+   , infx LeftAssociative "-"
    ]
- , [ infx "<<" [] LeftAssociative
-   , infx ">>" [] LeftAssociative
-   , infx "?" [":"] RightAssociative
+ , [ infx LeftAssociative "<<"
+   , infx LeftAssociative ">>"
+   , infx RightAssociative "?" `distfix` ":"
    ]
- , [ prefx "if" ["then","else"]
+ , [ prefx "if" `distfix` "then" `distfix` "else"
    ]
- , [ infx "," [] RightAssociative
+ , [ infx RightAssociative ","
    ]
  , [ Op1 True "\\" [(SExpression,"->")] (RightOpen True) RightAssociative 0
    ]
- , [ prefx "let" ["in"]
-   , infx "where" [] RightAssociative
-   , prefx "case" ["of"]
+ , [ prefx "let" `distfix` "in"
+   , infx RightAssociative "where"
+   , prefx "case" `distfix` "of"
    ]
- , [ infx "=" [] NonAssociative
+ , [ infx NonAssociative "="
    ]
- , [ infx ";" [] RightAssociative
+ , [ infx RightAssociative ";"
    ]
- , [ infx "::" [";;"] RightAssociative
-   , infx "==" [";;"] RightAssociative
+ , [ infx RightAssociative "::" `distfix` ";;"
+   , infx RightAssociative "==" `distfix` ";;"
    ]
  ]
 

@@ -5,16 +5,16 @@ import Text.Syntactical.Data
 
 table :: Table String
 table = buildTable
- [ [ closed_ "(" [] ")" Distfix
-   , closed_ "⟨" [] "⟩" SExpression
-   , closed "</" []"/>" Distfix
-   , closed "{" [] "}" SExpression
-   , Op2 True "[" [] Distfix "]"
-   , Op2 True "[" [(Distfix, "|")] Distfix "]"
-   , Op2 True "[" [(Distfix, "|"),(Distfix, "|")] Distfix "]"
-   , Op2 True "[." [(Distfix, "|")] Distfix "]"
-   , Op2 True "</" [(Distfix, "|")] Distfix "/>"
-   , Op2 True "|" [] Distfix "|"
+ [ [ closed_ "(" Distfix ")"
+   , closed_ "⟨" SExpression "⟩"
+   , closed "</" Distfix "/>"
+   , closed "{" SExpression "}"
+   , closed "[" Distfix "]"
+   , closed "[" Distfix "|" `distfix` "]"
+   , closed "[" Distfix "|" `distfix` "|" `distfix` "]"
+   , closed "[." Distfix "|" `distfix` "]"
+   , closed "</" Distfix "|" `distfix` "/>"
+   , closed "|" Distfix "|"
    ]
  ]
 
