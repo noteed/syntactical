@@ -5,7 +5,8 @@ module Text.Syntactical (
   infx_, prefx_, postfx_, closed_,
   sexpr, distfix,
   buildTable,
-  Associativity(..), Kind(..), Table, SExpr(..)
+  Associativity(..), Kind(..), Table, SExpr(..),
+  Token, string, operator, consider
   ) where
 
 import Text.Syntactical.Yard
@@ -15,5 +16,6 @@ import Text.Syntactical.Data (
   infx_, prefx_, postfx_, closed_,
   sexpr, distfix,
   buildTable,
-  Associativity(..), Kind(..), Table, SExpr(..)
+  Associativity(..), Kind(..), Table, SExpr(..),
+  Token, string, operator, consider
   )

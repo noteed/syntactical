@@ -8,12 +8,14 @@ import Data.List (intersperse)
 import Text.Syntactical.Data (
   SExpr(..), Tree(..), Table,
   partSymbol, previousPart,
-  Token, operator
+  Token, string, operator, consider
   )
 import Text.Syntactical.Yard (Shunt(..), initial, isDone, step, Failure(..))
 
 instance Token String where
+  string = id
   operator pt = Atom . concat $ previousPart pt ++ [partSymbol pt]
+  consider = (==)
 
 -- | Similar to the 'shunt' function but print the steps
 -- performed by the modified shunting yard algorithm.

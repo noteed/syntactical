@@ -8,7 +8,7 @@ module Text.Syntactical.Data (
   applicator, applicator', continue, lower,
   arity, partSymbol, nextPart, previousPart,
   findBoth, findBegin, FindBegin(..),
-  Token ,operator
+  Token, string, operator, consider
   ) where
 
 import Data.List
@@ -25,10 +25,13 @@ data Tree a = Branch [Tree a]
             | Part (Part a)
   deriving (Eq, Show)
 
--- The Eq constraint is necessary to lookup operator part in the
--- table.
-class Eq a => Token a where
+class Token a where
+  string :: a -> String
   operator :: Part a -> SExpr a
+  consider :: a -> a -> Bool
+
+considers :: Token a => [a] -> [a] -> Bool
+considers a b = length a == length b && and (zipWith consider a b)
 
 -- The boolean is to specify if the operator should show up
 -- in the result or be discarded. The opening further specifies
@@ -120,14 +123,14 @@ lower pt1 pt2 = case (associativity pt1, associativity pt2) of
           | otherwise = False
 
 findParts :: Token a => Table a -> a -> [Part a]
-findParts (Table ps) x = filter ((==x) . partSymbol) ps
+findParts (Table ps) x = filter ((consider x) . partSymbol) ps
 
 applicator :: Token a => Table a -> SExpr a -> Bool
-applicator table (Atom x) = findParts table x == []
+applicator table (Atom x) = null $ findParts table x
 applicator _ (List _) = True
 
 applicator' :: Token a => Table a -> Tree a -> Bool
-applicator' table (Leaf x) = findParts table x == []
+applicator' table (Leaf x) = null $ findParts table x
 applicator' _ (Branch _) = True
 applicator' _ _ = False
 
@@ -196,7 +199,7 @@ groupFirst [] = error "groupFirst: empty list"
 groupFirst (First a' x s' k':pts) = go a' s' k' pts
   where go a s k [] = First a x s k
         go a s k (First a2 _ s2 k2:xs)
-          | a == a2 && k == k2 = go a (s `union` s2) k xs
+          | a == a2 && k == k2 = go a (unionBy consider s s2) k xs
         go _ _ _ _ = error "groupFirst: ambiguous first parts"
 groupFirst _ = error "groupFirst: not a First part"
 
@@ -205,8 +208,8 @@ groupMiddle [] = error "groupMiddle: empty list"
 groupMiddle (Middle ss' x s' k':pts) = go ss' s' k' pts
   where go ss s k [] = Middle ss x s k
         go ss s k (Middle ss2 _ s2 k2:xs)
-          | ss /= ss2 = error "groupMiddle: different prefix"
-          | k == k2 = go ss (s `union` s2) k xs
+          | not (considers ss ss2) = error "groupMiddle: different prefix"
+          | k == k2 = go ss (unionBy consider s s2) k xs
         go _ _ _ _ = error "groupMiddle: ambiguous middle parts"
 groupMiddle _ = error "groupMiddle: not a Middle part"
 
@@ -338,7 +341,7 @@ previousPart (Lone _ _ _ _) = []
 previousPart (Middle l _ _ _) = l
 
 continue :: Token a => Part a -> Part a -> Bool
-continue x y = previousPart x == previousPart y ++ [partSymbol y]
+continue x y = considers (previousPart x) (previousPart y ++ [partSymbol y])
 
 cut :: Op a -> [Part a]
 cut (Op1 keep x [] opening _ p) =

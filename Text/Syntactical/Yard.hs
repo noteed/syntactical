@@ -109,6 +109,10 @@ rule (S tt st oo _) ru = S tt st oo ru
 initial :: [SExpr a] -> Shunt a
 initial ts = S ts [] [[]] Initial
 
+isInitial :: Rule a -> Bool
+isInitial Initial = True
+isInitial _ = False
+
 -- | Parse a list of tokens according to an operator table.
 shunt :: Token a => Table a -> [SExpr a] -> Either (Failure a) (SExpr a)
 shunt table ts = case fix $ initial ts of
@@ -210,7 +214,7 @@ step table sh@(S (t:ts) [] oo ru) = case t of
     MissingBegin xs -> rule sh (failure $ xs `MissingBefore` x)
   where
     go pt1
-      | leftHole pt1 && ru == Initial =
+      | leftHole pt1 && isInitial ru =
       rule sh (failure $ MissingSubBefore $ partSymbol pt1)
       | leftHole pt1 =
       S ts [Part pt1] oo StackOp
