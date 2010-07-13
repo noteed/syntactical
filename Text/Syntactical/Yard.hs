@@ -21,7 +21,7 @@
 -- function seems a good place to implement such restriction.
 
 module Text.Syntactical.Yard
-  ( Shunt(..), initial, isDone, shunt, step, Failure(..)
+  ( Shunt(..), initial, isDone, shunt, step, Failure(..), Rule(..)
   ) where
 
 import Text.Syntactical.Data (
@@ -77,7 +77,7 @@ data Result a =
 data Failure a =
     MissingBefore [[a]] a -- ^ missing parts before part
   | MissingAfter [a] [a]  -- ^ missing parts after parts
-  | CantMix (Op a) (Op a) -- ^ can't mix two operators
+  | CantMix (Op a) (Op a) -- ^ can't mix two operators -- TODO this is unused...
   | MissingSubBetween a a -- ^ missing sub-expression between parts
   | MissingSubBefore a    -- ^ missing sub-expression before string
   | MissingSubAfter a     -- ^ missing sub-expression after string

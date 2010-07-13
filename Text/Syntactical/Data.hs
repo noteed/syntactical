@@ -8,7 +8,7 @@ module Text.Syntactical.Data (
   applicator, applicator', continue, lower,
   arity, partSymbol, nextPart, previousPart,
   findBoth, findBegin, FindBegin(..),
-  Token, string, operator, consider
+  Token, toString, operator, consider
   ) where
 
 import Data.List
@@ -26,7 +26,7 @@ data Tree a = Branch [Tree a]
   deriving (Eq, Show)
 
 class Token a where
-  string :: a -> String
+  toString :: a -> String
   operator :: Part a -> SExpr a
   consider :: a -> a -> Bool
 

@@ -1,12 +1,7 @@
 -- Convenience module exporting what's important.
 module Text.Syntactical (
-  shunt, Failure(..),
-  infx, prefx, postfx, closed,
-  infx_, prefx_, postfx_, closed_,
-  sexpr, distfix,
-  buildTable,
-  Associativity(..), Kind(..), Table, SExpr(..),
-  Token, string, operator, consider
+  module Text.Syntactical.Yard,
+  module Text.Syntactical.Data
   ) where
 
 import Text.Syntactical.Yard
@@ -16,6 +11,7 @@ import Text.Syntactical.Data (
   infx_, prefx_, postfx_, closed_,
   sexpr, distfix,
   buildTable,
+  arity, partSymbol, nextPart, previousPart,
   Associativity(..), Kind(..), Table, SExpr(..),
-  Token, string, operator, consider
+  Token, toString, operator, consider
   )
