@@ -27,7 +27,7 @@ data Tree a = Branch [Tree a]
 
 class Token a where
   toString :: a -> String
-  operator :: Part a -> SExpr a
+  operator :: Part a -> [SExpr a] -> SExpr a
   consider :: a -> a -> Bool
 
 considers :: Token a => [a] -> [a] -> Bool

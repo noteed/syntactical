@@ -235,7 +235,7 @@ apply (Part y) (os:oss) =
   -- TODO this error case should probably be discovered earlier,
   -- so hitting this point should be a bug.
   then error $ "not enough arguments supplied to " -- TODO ++ show y
-  else (List (operator y:reverse l) : r) : oss
+  else (operator y (reverse l) : r) : oss
   where nargs = arity y
         (l,r) = splitAt nargs os
 apply (Leaf x) (os:h:oss) =  (ap:h):oss

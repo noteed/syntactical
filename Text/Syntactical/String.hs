@@ -16,7 +16,8 @@ import Text.Syntactical.Yard (
 
 instance Token String where
   toString = id
-  operator pt = Atom . concat $ previousPart pt ++ [partSymbol pt]
+  operator pt as = List $
+    (Atom . concat $ previousPart pt ++ [partSymbol pt]) : as
   consider = (==)
 
 -- | Similar to the 'shunt' function but print the steps
