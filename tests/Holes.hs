@@ -17,6 +17,9 @@ table = buildTable
    , closed "</" Distfix "|" `distfix` "/>"
    , closed "|" Distfix "|"
    ]
+ , [ infx LeftAssociative "+"
+   , infx LeftAssociative "-"
+   ]
  ]
 
 -- [(input, expected output)]

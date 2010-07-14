@@ -167,17 +167,17 @@ step table sh@(S tt@(t@(Atom x):ts) st@(s@(Part y):ss) oo@(os:oss) ru) =
     Right NoBegin -> error "can't happen" -- x is in the table for sure
   where
     go pt1
+      | rightHole y == Just SExpression && pt1 `continue` y && stackedOp ru =
+      let ([]:h:oss') = oo
+      in S ts (Part pt1:ss) ((List []:h):oss') ContinueOp
+      | rightHole y == Just SExpression && pt1 `continue` y =
+      let (os':h:oss') = oo
+          ap = List (reverse os')
+      in S ts (Part pt1:ss) ((ap:h):oss') ContinueOp
       | rightHole pt1 == Just Distfix && rightHole y == Just SExpression =
       S ts (Part pt1:st) oo StackL
       | rightHole pt1 == Just SExpression =
       S ts (Part pt1:st) ([]:oo) StackL
-      | rightHole y == Just SExpression && pt1 `continue` y && stackedOp ru =
-      let ([]:h:oss') = oo
-      in S ts (Part pt1:ss) ((List []:h):oss') MatchedR
-      | rightHole y == Just SExpression && pt1 `continue` y =
-      let (os':h:oss') = oo
-          ap = List (reverse os')
-      in S ts (Part pt1:ss) ((ap:h):oss') MatchedR
       | rightHole y == Just SExpression =
       S ts st ((t:os):oss) SExpr
 

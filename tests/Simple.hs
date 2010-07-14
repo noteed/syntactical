@@ -270,7 +270,11 @@ checkTable0 = checkTests table0 testsTable0
 
 parse0 = shunt table0 . tokenize
 
+parse1 = shunt Holes.table . tokenize
+
 steps0 = steps table0 . tokenize
+
+steps1 = steps Holes.table . tokenize
 
 checkTests table l = mapM_ (check table) l
 
