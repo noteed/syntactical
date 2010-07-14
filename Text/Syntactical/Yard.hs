@@ -40,19 +40,15 @@ import Text.Syntactical.Data (
 -- Data structures to support the shunting-yard algorithm
 ----------------------------------------------------------------------
 
--- An applicator is a non-operator symbol that is applied
--- to some arguments. When such a symbol is read, it is
--- placed on the (operator/applicator) stack. If there is
--- already such a symbol on the stack, it goes straight
--- to the output stack (this is the Inert case).
+-- An applicator is a non-operator (i.e. a symbol or a list) applied
+-- to some arguments. When such a symbol is read, it is placed on the
+-- operator stack. If there is already such a symbol on the stack, it
+-- goes straight to the output stack (this is the Argument case).
 data Rule a = Initial
-          | Inert      -- not an operator or an applicator, goes
-                       -- straight to the output stack
-          | MakeInert  -- apply and push on the the input stack
+          | Argument    -- straight to the output stack
           | Application -- apply an applicator
-          | FlushApp   -- apply an applicator
+          | ApplyOp    -- apply an operator
           | StackApp   -- push an applicator to the stack
-          | FlushOp    -- apply an operator
           | StackL     -- push the first part of a closed or prefix operator
           | StackOp    -- push a new operator part to the stack
           | ContinueOp -- append an operator part to the operator
@@ -146,8 +142,8 @@ step table (S (t:ts) st@(s:_) oo@(os:oss) _)
       S ts st ((t:os):oss) SExpr
     | otherwise ->
       S ts (s2t t:st) ([]:oo) StackApp
-  Leaf _                       -> S ts st ((t:os):oss) Inert
-  Branch _                     -> S ts st ((t:os):oss) Inert
+  Leaf _                       -> S ts st ((t:os):oss) Argument
+  Branch _                     -> S ts st ((t:os):oss) Argument
 
 -- An operator part is on the input stack and an applicator is on
 -- the stack.
@@ -160,7 +156,7 @@ step table (S tt@((Atom x):ts) st@(s:ss) oo _)
       | not (leftOpen pt1) ->
       S ts (Part pt1:st) oo StackL
     _ ->
-      S tt ss (apply s oo) FlushApp
+      S tt ss (apply s oo) Application
 
 -- An operator part is on the input stack and on the stack.
 step table sh@(S tt@(t@(Atom x):ts) st@(s@(Part y):ss) oo@(os:oss) ru) =
@@ -193,21 +189,21 @@ step table sh@(S tt@(t@(Atom x):ts) st@(s@(Part y):ss) oo@(os:oss) ru) =
       | not (leftOpen pt1) && begin pt1 = S ts (Part pt1:st) oo StackL
 
       | otherwise = case pt1 `priority` y of
-        Lower -> S tt ss (apply s oo) FlushOp
+        Lower -> S tt ss (apply s oo) ApplyOp
         Higher -> S ts (Part pt1:st) oo StackOp
         NoPriority -> rule sh (failure $ CantMix pt1 y)
 
 -- No more tokens on the input stack, just have to flush
 -- the remaining applicators and/or operators.
 step _ sh@(S [] (s:ss) oo ru) = case s of
-  Leaf _             -> S [] ss (apply s oo) FlushApp
-  Branch _           -> S [] ss (apply s oo) FlushApp
+  Leaf _             -> S [] ss (apply s oo) Application
+  Branch _           -> S [] ss (apply s oo) Application
   Part y | end y && rightOpen y && stackedOp ru ->
     rule sh (failure $ MissingSubAfter $ symbol y)
     -- The infix or prefix operator has all its parts.
     -- The postfix/closed is handled in the first equation.
        | end y ->
-    S [] ss (apply s oo) FlushOp
+    S [] ss (apply s oo) ApplyOp
        | otherwise ->
     -- The operator is not complete.
     rule sh (failure $
@@ -313,12 +309,10 @@ showFailure f = case f of
 showRule :: Token a => Rule a -> String
 showRule ru = case ru of
   Initial     -> "Initial"
-  Inert       -> "Inert"
-  MakeInert   -> "MakeInert"
+  Argument    -> "Argument"
   Application -> "Application"
-  FlushApp    -> "FlushApp"
   StackApp    -> "StackApp"
-  FlushOp     -> "FlushOp"
+  ApplyOp     -> "ApplyOp"
   StackL      -> "StackL"
   StackOp     -> "StackOp"
   ContinueOp  -> "ContinueOp"
