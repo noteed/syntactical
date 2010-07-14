@@ -1,3 +1,4 @@
+{-# Language TypeSynonymInstances #-}
 module Main where
 
 import Test.Framework (defaultMain, testGroup, Test)
@@ -10,6 +11,12 @@ import Text.Syntactical.Data
 import Text.Syntactical.String
 
 import qualified Holes
+
+-- Make it possible to shunt around some strings.
+instance Token String where
+  toString = id
+  operator pt as = List $
+    (Atom . concat $ previousPart pt ++ [partSymbol pt]) : as
 
 table0 :: Table String
 table0 = buildTable

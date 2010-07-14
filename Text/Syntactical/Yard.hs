@@ -20,17 +20,22 @@
 -- 1 (2 + 3) or 1 a shoule be disallowed too. The 'apply'
 -- function seems a good place to implement such restriction.
 
-module Text.Syntactical.Yard
-  ( Shunt(..), initial, isDone, shunt, step, Failure(..), Rule(..)
+module Text.Syntactical.Yard (
+  Shunt(..), Failure(..), Rule(..),
+  initial, isDone, shunt, step, steps, showFailure
   ) where
 
+import Data.List (intersperse)
+
 import Text.Syntactical.Data (
-  SExpr(..), Tree(..), Op(..), Kind(..), Part(..), Table, Priority(..),
+  SExpr(..), Tree(..),
+  Kind(..), Part(..), Table, Priority(..),
   begin, end, leftHole, rightHole, rightHoleKind, discard,
   applicator, applicator', continue, priority,
   arity, partSymbol, nextPart, previousPart,
   findBoth, findBegin, FindBegin(..),
-  Token, operator
+  Token, toString, operator,
+  showPart, showSExpr, showTree
   )
 
 -- convert a SExpr to a Tree
@@ -244,4 +249,80 @@ apply (Leaf x) (os:h:oss) =  (ap:h):oss
 apply (Branch xs) (os:h:oss) =  (ap:h):oss
   where ap = if null os then List (map t2s xs) else List (List (map t2s xs):reverse os)
 apply _ _ = error "can't happen"
+
+-- | Similar to the 'shunt' function but print the steps
+-- performed by the modified shunting yard algorithm.
+steps :: Token a => Table a -> [SExpr a] -> IO ()
+steps table ts = do
+  putStrLn $ "               Input               Stack              Output   Rule"
+  let sh = iterate (step table) $ initial ts
+      l = length $ takeWhile (not . isDone) sh
+  mapM_ (putStrLn . showShunt) (take (l + 1) sh)
+
+-- | Give a textual representation of a 'Failure'.
+showFailure :: Token a => Failure a -> String
+showFailure f = case f of
+  MissingBefore ps p ->
+    "Parse error: missing operator parts " ++
+    concatMap (\pt -> concat (intersperse " " $ map toString pt)) ps ++
+    " before " ++ toString p
+  MissingAfter p ps ->
+    "Parse error: missing operator part " ++
+    concat (intersperse ", " $ map toString p) ++ " after " ++
+    concat (intersperse " " $ map toString ps)
+  CantMix a b ->
+     "Parse error: cannot mix operators " ++ showPart a ++
+     " and " ++ showPart b
+  MissingSubBetween a b ->
+    "Parse error: no sub-expression between " ++ toString a ++
+    " and " ++ toString b
+  MissingSubBefore a ->
+    "Parse error: no sub-expression before " ++ toString a
+  MissingSubAfter a ->
+    "Parse error: no sub-expression after " ++ toString a
+  Unexpected ->
+    "Parsing raised a bug"
+
+--TODO
+showRule :: Token a => Rule a -> String
+showRule ru = case ru of
+  Initial     -> "Initial"
+  Inert       -> "Inert"
+  MakeInert   -> "MakeInert"
+  Application -> "Application"
+  FlushApp    -> "FlushApp"
+  StackApp    -> "StackApp"
+  FlushOp     -> "FlushOp"
+  StackL      -> "StackL"
+  StackOp     -> "StackOp"
+  ContinueOp  -> "ContinueOp"
+  MatchedR    -> "MatchedR"
+  SExpr       -> "SExpr"
+  Done result -> case result of
+    Success   -> "Success"
+    Failure f -> "Failure:\n" ++ showFailure f
+
+showShunt :: Token a => Shunt a -> String
+showShunt (S ts ss os ru) =
+  pad 20 ts ++ pad' 20 ss ++ pads 20 os ++ "   " ++ showRule ru
+
+bracket :: [String] -> String
+bracket s = "[" ++ (concat . intersperse ",") s ++ "]"
+
+pad' :: Token a => Int -> [Tree a] -> String
+pad' n s =
+  let s' = bracket . map showTree $ s
+  in replicate (n - length s') ' ' ++ s'
+
+pad :: Token a => Int -> [SExpr a] -> String
+pad n s =
+  let s' = bracket . map showSExpr $ s
+  in replicate (n - length s') ' ' ++ s'
+
+pads :: Token a => Int -> [[SExpr a]] -> String
+pads n s =
+  let s' = bracket .
+        map (bracket . map showSExpr) $ s
+  in replicate (n - length s') ' ' ++ s'
+
 

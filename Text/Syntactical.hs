@@ -5,7 +5,7 @@ module Text.Syntactical (
   ) where
 
 import Text.Syntactical.Yard
-  (shunt, Failure(..))
+  (shunt, steps, Failure(..))
 import Text.Syntactical.Data (
   infx, prefx, postfx, closed,
   infx_, prefx_, postfx_, closed_,

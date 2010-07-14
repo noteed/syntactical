@@ -21,7 +21,6 @@ Source-repository head
 Library
   Exposed-modules:     Text.Syntactical.Data,
                        Text.Syntactical.Yard,
-                       Text.Syntactical.String,
                        Text.Syntactical
 
   Build-depends:    base >= 4.0

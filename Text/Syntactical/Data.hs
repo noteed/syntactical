@@ -9,7 +9,8 @@ module Text.Syntactical.Data (
   applicator, applicator', continue, priority,
   arity, partSymbol, nextPart, previousPart,
   findBoth, findBegin, FindBegin(..),
-  Token, toString, operator, consider
+  Token, toString, operator, consider,
+  showPart, showSExpr, showTree
   ) where
 
 import Data.List
@@ -19,12 +20,27 @@ data SExpr a = List [SExpr a]
              | Atom a
   deriving (Eq, Show)
 
+showSExpr :: Token a => SExpr a -> String
+showSExpr = tail . f
+  where
+  f (Atom s) = ' ' : toString s
+  f (List []) = ' ' : "⟨⟩"
+  f (List es) = ' ' : '⟨' : tail (concatMap f es) ++ "⟩"
+
 -- The s-expression data type, abstracting over the token type,
 -- augmented to represent parts (used in the operator stack).
 data Tree a = Branch [Tree a]
             | Leaf a
             | Part (Part a)
   deriving (Eq, Show)
+
+showTree :: Token a => Tree a -> String
+showTree = tail . f
+  where
+  f (Leaf s) = ' ' : toString s
+  f (Part y) = ' ' : concatMap toString (previousPart y ++ [partSymbol y])
+  f (Branch []) = ' ' : "⟨⟩"
+  f (Branch es) = ' ' : '⟨' : tail (concatMap f es) ++ "⟩"
 
 class Token a where
   toString :: a -> String
@@ -251,6 +267,10 @@ data Part a = First (Maybe (Associativity,Precedence)) a [a] Kind
           | Middle [a] a [a] Kind
 -- possible predecessor and successor parts, both non-empty, s-expr/distfix
   deriving (Show, Eq)
+
+-- TODO
+showPart :: Token a => Part a -> String
+showPart = undefined
 
 isLone :: Part a -> Bool
 isLone (Lone _ _ _ _) = True
