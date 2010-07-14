@@ -38,16 +38,9 @@ import Text.Syntactical.Data (
   showPart, showSExpr, showTree
   )
 
--- convert a SExpr to a Tree
-s2t :: SExpr a -> Tree a
-s2t (Atom x) = Leaf x
-s2t (List xs) = Branch $ map s2t xs
-
--- convert a Tree to a SExpr (partial function)
-t2s :: Tree a -> SExpr a
-t2s (Leaf x) = Atom x
-t2s (Branch xs) = List $ map t2s xs
-t2s (Part _) = error "can't convert a Tree Part to a SExpr" -- operator is used in this case
+----------------------------------------------------------------------
+-- Data structures to support the shunting-yard algorithm
+----------------------------------------------------------------------
 
 -- An applicator is a non-operator symbol that is applied
 -- to some arguments. When such a symbol is read, it is
@@ -71,6 +64,16 @@ data Rule a = Initial
           | Done (Result a)
   deriving (Show, Eq)
 
+isInitial :: Rule a -> Bool
+isInitial Initial = True
+isInitial _ = False
+
+stackedOp :: Rule a -> Bool
+stackedOp StackL = True
+stackedOp StackOp = True
+stackedOp ContinueOp = True
+stackedOp _ = False
+
 data Result a =
     Success    -- everything is successfuly parsed
   | Failure (Failure a)
@@ -89,18 +92,8 @@ data Failure a =
   | Unexpected            -- ^ this is a bug if it happens
   deriving (Eq, Show)
 
-isDone :: Shunt a -> Bool
-isDone (S _ _ _ (Done _)) = True
-isDone _ = False
-
 failure :: Failure a -> Rule a
 failure f = Done $ Failure f
-
-stackedOp :: Rule a -> Bool
-stackedOp StackL = True
-stackedOp StackOp = True
-stackedOp ContinueOp = True
-stackedOp _ = False
 
 data Shunt a = S
   [SExpr a]   -- list of tokens (Nodes can be pushed back.)
@@ -108,15 +101,21 @@ data Shunt a = S
   [[SExpr a]] -- stack of stacks
   (Rule a)
 
+isDone :: Shunt a -> Bool
+isDone (S _ _ _ (Done _)) = True
+isDone _ = False
+
+-- Set the rule of a Shunt structure.
 rule :: Shunt a -> Rule a -> Shunt a
 rule (S tt st oo _) ru = S tt st oo ru
 
+-- Construct the initial state of the shunting-yard from a given input list.
 initial :: [SExpr a] -> Shunt a
 initial ts = S ts [] [[]] Initial
 
-isInitial :: Rule a -> Bool
-isInitial Initial = True
-isInitial _ = False
+----------------------------------------------------------------------
+-- The modified shunting-yard algorithm
+----------------------------------------------------------------------
 
 -- | Parse a list of tokens according to an operator table.
 shunt :: Token a => Table a -> [SExpr a] -> Either (Failure a) (SExpr a)
@@ -127,6 +126,7 @@ shunt table ts = case fix $ initial ts of
   where fix s = let s' = step table s in
                 if isDone s' then s' else fix s'
 
+-- Perfom one step of the shunting-yard, moving it from one state to the next.
 step :: Token a => Table a -> Shunt a -> Shunt a
 
 -- There is a complete Closed or Postifx operator on the top of the stack.
@@ -235,12 +235,12 @@ step _ sh@(S [] [] [[_]] _) = rule sh $ Done Success
 -- This equation should never be reached; otherwise it is a bug.
 step _ sh = rule sh (failure Unexpected)
 
+-- Construct a new output stack by applying an operator,
+-- a symbol, or a list to the top of the output stack.
 apply :: Token a => Tree a -> [[SExpr a]] -> [[SExpr a]]
 apply (Part y) (os:oss) =
   if length l < nargs
-  -- TODO this error case should probably be discovered earlier,
-  -- so hitting this point should be a bug.
-  then error $ "not enough arguments supplied to " -- TODO ++ show y
+  then error $ "can't happen"
   else (operator y (reverse l) : r) : oss
   where nargs = arity y
         (l,r) = splitAt nargs os
@@ -250,6 +250,10 @@ apply (Branch xs) (os:h:oss) =  (ap:h):oss
   where ap = if null os then List (map t2s xs) else List (List (map t2s xs):reverse os)
 apply _ _ = error "can't happen"
 
+----------------------------------------------------------------------
+-- Visualize the sunting-yard algorithm steps
+----------------------------------------------------------------------
+
 -- | Similar to the 'shunt' function but print the steps
 -- performed by the modified shunting yard algorithm.
 steps :: Token a => Table a -> [SExpr a] -> IO ()
@@ -258,6 +262,26 @@ steps table ts = do
   let sh = iterate (step table) $ initial ts
       l = length $ takeWhile (not . isDone) sh
   mapM_ (putStrLn . showShunt) (take (l + 1) sh)
+
+----------------------------------------------------------------------
+-- Convenience functions used in step and apply
+----------------------------------------------------------------------
+
+-- Convert a SExpr to a Tree
+s2t :: SExpr a -> Tree a
+s2t (Atom x) = Leaf x
+s2t (List xs) = Branch $ map s2t xs
+
+-- Convert a Tree to a SExpr (partial function)
+t2s :: Tree a -> SExpr a
+t2s (Leaf x) = Atom x
+t2s (Branch xs) = List $ map t2s xs
+-- The 'operator' function is used in this case
+t2s (Part _) = error "can't convert a Tree Part to a SExpr"
+
+----------------------------------------------------------------------
+-- A few 'show' functions for Failure, Rule, and Shunt
+----------------------------------------------------------------------
 
 -- | Give a textual representation of a 'Failure'.
 showFailure :: Token a => Failure a -> String
@@ -283,7 +307,6 @@ showFailure f = case f of
   Unexpected ->
     "Parsing raised a bug"
 
---TODO
 showRule :: Token a => Rule a -> String
 showRule ru = case ru of
   Initial     -> "Initial"
