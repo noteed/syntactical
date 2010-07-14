@@ -9,6 +9,7 @@ table = buildTable
    , closed_ "⟨" SExpression "⟩"
    , closed "</" Distfix "/>"
    , closed "{" SExpression "}"
+   , closed "{" SExpression "|" `distfix` "}"
    , closed "[" Distfix "]"
    , closed "[" Distfix "|" `distfix` "]"
    , closed "[" Distfix "|" `distfix` "|" `distfix` "]"
@@ -53,6 +54,8 @@ tests =
   , ("{ + 1 2 }", "⟨{} ⟨+ 1 2⟩⟩")
   , ("{ 1 + 2 }", "⟨{} ⟨1 + 2⟩⟩")
   , ("{ 1 2 + }", "⟨{} ⟨1 2 +⟩⟩")
+
+  , ("{ 1 + 2 | a - b }", "⟨{|} ⟨1 + 2⟩ ⟨- a b⟩⟩")
 
   , ("[ a ]", "⟨[] a⟩")
   , ("[ a | b ]", "⟨[|] a b⟩")

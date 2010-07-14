@@ -92,7 +92,7 @@ cut (Op1 _ x xs opening a p) =
 cut (Op2 keep x [] h y) =
   [First Nothing x [y] h, Last Nothing [x] y keep 1]
 cut (Op2 keep x xs h y) =
-  First Nothing x [snd $ head xs] h :
+  First Nothing x [snd $ head xs] (fst $ head xs) :
   map f (zip4 ls ss rs ks) ++
   [Last Nothing (x:map snd xs) y keep ar]
   where
