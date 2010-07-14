@@ -118,8 +118,6 @@ holesAfter ((a,b):xs@((c,_):_)) h = (a, (b,c) : snd (holesAfter xs h))
 -- buildTable constructs an operator table that can be
 -- used with the shunt function. Operators are given
 -- in decreasing precedence order.
--- TODO see if Parsec's buildExpressionParser uses a
--- incresing or decreasing list.
 buildTable :: [[Op a]] -> Table a
 buildTable ls = Table . concat $ zipWith f ls [n, n - 1 .. 0]
   where n = length ls
@@ -423,7 +421,6 @@ showTree = tail . f
   f (Branch []) = ' ' : "⟨⟩"
   f (Branch es) = ' ' : '⟨' : tail (concatMap f es) ++ "⟩"
 
--- TODO
 showPart :: Token a => Part a -> String
-showPart = undefined
+showPart = toString . symbol
 

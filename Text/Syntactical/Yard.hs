@@ -6,8 +6,6 @@
 -- TODO make sure the rules reflect what's going on, a same
 -- rule should be associated to a same behavior.
 -- TODO is ! a + b allowed if ! and + have the same precedence?
--- TODO allow specific operator table for internal operator holes
--- (e.g. to reuse a same symbol with different fixity/precedecence).
 -- TODO use HPC to see if tests cover the code.
 -- TODO maybe feed random tokens to the algorithm to see if it can crash.
 -- TODO use hlint.
@@ -95,6 +93,11 @@ data Failure a =
 failure :: Failure a -> Rule a
 failure f = Done $ Failure f
 
+-- The state of the shunting-yard. The input and output types are the same.
+-- The operator stack can hold parts in addition to the atoms and lists.
+-- This imply conversions (using s2t and t2s) that would be avoided by
+-- using the Tree type for the input and the output. But ruling out the
+-- invalid input and output (those containing parts) seems better.
 data Shunt a = S
   [SExpr a]   -- list of tokens (Nodes can be pushed back.)
   [Tree a]    -- stack of operators and applicators
@@ -122,7 +125,7 @@ shunt :: Token a => Table a -> [SExpr a] -> Either (Failure a) (SExpr a)
 shunt table ts = case fix $ initial ts of
   S [] [] [[o']] (Done Success) -> Right o'
   S _ _ _ (Done (Failure f)) -> Left f
-  _ -> error "can't happen"
+  _ -> error "can't happen" -- the Success case has only the previous form.
   where fix s = let s' = step table s in
                 if isDone s' then s' else fix s'
 
@@ -239,8 +242,8 @@ step _ sh = rule sh (failure Unexpected)
 -- a symbol, or a list to the top of the output stack.
 apply :: Token a => Tree a -> [[SExpr a]] -> [[SExpr a]]
 apply (Part y) (os:oss) =
-  if length l < nargs
-  then error $ "can't happen"
+  if length l /= nargs
+  then error $ "can't happen" -- holes are always filled by one expression
   else (operator y (reverse l) : r) : oss
   where nargs = arity y
         (l,r) = splitAt nargs os
