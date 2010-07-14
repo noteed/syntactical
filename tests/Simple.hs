@@ -8,7 +8,6 @@ import System.Environment (getArgs)
 
 import Text.Syntactical
 import Text.Syntactical.Data
-import Text.Syntactical.String
 
 import qualified Holes
 
