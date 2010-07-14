@@ -1,13 +1,13 @@
 module Text.Syntactical.Data (
   SExpr(..), Tree(..), Op(..), Opening(..),
-  Associativity(..), Kind(..), Part(..), Table, Priority(..),
+  Associativity(..), Hole(..), Part(..), Table, Priority(..),
   infx, prefx, postfx, closed,
   infx_, prefx_, postfx_, closed_,
   sexpr, distfix,
   buildTable,
-  begin, end, leftHole, rightHole, rightHoleKind, discard,
+  begin, end, leftOpen, rightOpen, rightHole, discard,
   applicator, applicator', continue, priority,
-  arity, partSymbol, nextPart, previousPart,
+  arity, symbol, next, previous,
   findBoth, findBegin, FindBegin(..),
   Token, toString, operator, consider,
   showPart, showSExpr, showTree
@@ -58,8 +58,8 @@ considers a b = length a == length b && and (zipWith consider a b)
 -- in the result or be discarded. The opening further specifies
 -- in the non-closed variant if the operator is prefix, infix, or postfix.
 data Op a =
-    Op1 Bool a [(Kind,a)] Opening Associativity Precedence
-  | Op2 Bool a [(Kind,a)] Kind a
+    Op1 Bool a [(Hole,a)] Opening Associativity Precedence
+  | Op2 Bool a [(Hole,a)] Hole a
   deriving (Eq, Show)
 
 setPrecedence :: Precedence -> Op a -> Op a
@@ -110,7 +110,7 @@ cut (Op2 keep x xs h y) =
 -- a list of (string,hole) where the ordre and interleaving
 -- is respected: the first hole is returned and the last hole
 -- is an argument.
-holesAfter :: [(Kind,s)] -> Kind -> (Kind, [(s,Kind)])
+holesAfter :: [(Hole,s)] -> Hole -> (Hole, [(s,Hole)])
 holesAfter [] h = (h, [])
 holesAfter [(a,b)] h = (a, [(b,h)])
 holesAfter ((a,b):xs@((c,_):_)) h = (a, (b,c) : snd (holesAfter xs h))
@@ -125,13 +125,13 @@ buildTable ls = Table . concat $ zipWith f ls [n, n - 1 .. 0]
   where n = length ls
         f l p = concatMap (cut . setPrecedence p) l
 
--- | The Kind is used to give various behaviours when dealing
+-- | The Hole is used to give various behaviours when dealing
 -- with internal holes.
 -- SExpression means the 'content' of the hole should be
 -- parsed as an s-expression.
 -- Distfix means the 'content' of the hole should be parsed
 -- as a distfix expression.
-data Kind = SExpression | Distfix
+data Hole = SExpression | Distfix
   deriving (Eq, Show)
 
 data Associativity = NonAssociative | LeftAssociative | RightAssociative
@@ -149,7 +149,7 @@ newtype Table a = Table [Part a]
 data FindBegin a = NoBegin | Begin (Part a) | MissingBegin [[a]]
 
 findParts :: Token a => Table a -> a -> [Part a]
-findParts (Table ps) x = filter ((consider x) . partSymbol) ps
+findParts (Table ps) x = filter ((consider x) . symbol) ps
 
 findContinuing :: Token a => [Part a] -> Part a -> Maybe (Part a)
 findContinuing xs y = case as of
@@ -195,16 +195,16 @@ findBegin table x = case filterParts $ findParts table x of
   --(_,_,(_:_),(_:_)) -> error "findBegin: ambiguous: middle or last part"
   (l@(_:_),_,_,_) -> Begin $ groupLone l
   (_,f@(_:_),_,_) -> Begin $ groupFirst f
-  (_,_,m,l) -> MissingBegin $ map previousPart (m++l)
+  (_,_,m,l) -> MissingBegin $ map previous (m++l)
 
 -- | A Part represent a single symbol of an operator.
-data Part a = First (Maybe (Associativity,Precedence)) a [a] Kind
+data Part a = First (Maybe (Associativity,Precedence)) a [a] Hole
 -- assoc/prec if it is open, possible successor parts, non-empty, s-expr/distfix
           | Last (Maybe (Associativity,Precedence)) [a] a Bool Int
 -- assoc/prec if it is open, possible predecessor parts, non-empty, keep/discard, arity
           | Lone Opening Precedence a Bool
 -- opening, precedence, keep/discard
-          | Middle [a] a [a] Kind
+          | Middle [a] a [a] Hole
 -- possible predecessor and successor parts, both non-empty, s-expr/distfix
   deriving (Show, Eq)
 
@@ -268,11 +268,11 @@ discard (Last _ _ _ keep _) = not keep
 discard (Lone _ _ _ keep) = not keep
 discard (Middle _ _ _ _) = False
 
-partSymbol :: Part a -> a
-partSymbol (First _ s _ _) = s
-partSymbol (Last _ _ s _ _) = s
-partSymbol (Lone _ _ s _) = s
-partSymbol (Middle _ s _ _) = s
+symbol :: Part a -> a
+symbol (First _ s _ _) = s
+symbol (Last _ _ s _ _) = s
+symbol (Lone _ _ s _) = s
+symbol (Middle _ s _ _) = s
 
 arity :: Part a -> Int
 arity (First _ _ _ _) = error "arity: bad argument"
@@ -281,27 +281,27 @@ arity (Lone (BothOpen _) _ _ _) = 2
 arity (Lone _ _ _ _) = 1
 arity (Last _ _ _ _ ar) = ar
 
-leftHole :: Part a -> Bool
-leftHole (First (Just _) _ _ _) = True
-leftHole (First _ _ _ _) = False
-leftHole (Last _ _ _ _ _) = True
-leftHole (Lone (RightOpen _) _ _ _) = False
-leftHole (Lone _ _ _ _) = True
-leftHole (Middle _ _ _ _) = True
+leftOpen :: Part a -> Bool
+leftOpen (First (Just _) _ _ _) = True
+leftOpen (First _ _ _ _) = False
+leftOpen (Last _ _ _ _ _) = True
+leftOpen (Lone (RightOpen _) _ _ _) = False
+leftOpen (Lone _ _ _ _) = True
+leftOpen (Middle _ _ _ _) = True
 
-rightHole :: Part a -> Bool
-rightHole (First _ _ _ _) = True
-rightHole (Last (Just _) _ _ _ _) = True
-rightHole (Last _ _ _ _ _) = False
-rightHole (Lone (LeftOpen _) _ _ _) = False
-rightHole (Lone _ _ _ _) = True
-rightHole (Middle _ _ _ _) = True
+rightOpen :: Part a -> Bool
+rightOpen (First _ _ _ _) = True
+rightOpen (Last (Just _) _ _ _ _) = True
+rightOpen (Last _ _ _ _ _) = False
+rightOpen (Lone (LeftOpen _) _ _ _) = False
+rightOpen (Lone _ _ _ _) = True
+rightOpen (Middle _ _ _ _) = True
 
-rightHoleKind :: Part a -> Maybe Kind
-rightHoleKind (First _ _ _ k) = Just k
-rightHoleKind (Last _ _ _ _ _) = Nothing
-rightHoleKind (Lone _ _ _ _) = Nothing
-rightHoleKind (Middle _ _ _ k) = Just k
+rightHole :: Part a -> Maybe Hole
+rightHole (First _ _ _ k) = Just k
+rightHole (Last _ _ _ _ _) = Nothing
+rightHole (Lone _ _ _ _) = Nothing
+rightHole (Middle _ _ _ k) = Just k
 
 associativity :: Part a -> Maybe (Associativity,Precedence)
 associativity (First ap _ _ _) = ap
@@ -313,20 +313,20 @@ associativity (Lone (RightOpen a) p _ _) = Just (a',p)
 associativity (Lone (BothOpen a) p _ _) = Just (a,p)
 associativity (Middle _ _ _ _) = Nothing
 
-nextPart :: Part a -> [a]
-nextPart (First _ _ r _) = r
-nextPart (Last _ _ _ _ _) = []
-nextPart (Lone _ _ _ _) = []
-nextPart (Middle _ _ r _) = r
+next :: Part a -> [a]
+next (First _ _ r _) = r
+next (Last _ _ _ _ _) = []
+next (Lone _ _ _ _) = []
+next (Middle _ _ r _) = r
 
-previousPart :: Part a -> [a]
-previousPart (First _ _ _ _) = []
-previousPart (Last _ l _ _ _) = l
-previousPart (Lone _ _ _ _) = []
-previousPart (Middle l _ _ _) = l
+previous :: Part a -> [a]
+previous (First _ _ _ _) = []
+previous (Last _ l _ _ _) = l
+previous (Lone _ _ _ _) = []
+previous (Middle l _ _ _) = l
 
 continue :: Token a => Part a -> Part a -> Bool
-continue x y = considers (previousPart x) (previousPart y ++ [partSymbol y])
+continue x y = considers (previous x) (previous y ++ [symbol y])
 
 filterParts :: [Part a] -> ([Part a],[Part a],[Part a],[Part a])
 filterParts pts = (filter isLone pts, filter isFirst pts,
@@ -384,10 +384,10 @@ postfx f = Op1 True f [] (LeftOpen True) RightAssociative 0
 postfx_ :: a -> Op a
 postfx_ f = Op1 False f [] (LeftOpen True) RightAssociative 0
 
-closed :: a -> Kind -> a -> Op a
+closed :: a -> Hole -> a -> Op a
 closed f k l = Op2 True f [] k l
 
-closed_ :: a -> Kind -> a -> Op a
+closed_ :: a -> Hole -> a -> Op a
 closed_ f k l = Op2 False f [] k l
 
 sexpr :: Op a -> a -> Op a
@@ -413,7 +413,7 @@ showTree :: Token a => Tree a -> String
 showTree = tail . f
   where
   f (Leaf s) = ' ' : toString s
-  f (Part y) = ' ' : concatMap toString (previousPart y ++ [partSymbol y])
+  f (Part y) = ' ' : concatMap toString (previous y ++ [symbol y])
   f (Branch []) = ' ' : "⟨⟩"
   f (Branch es) = ' ' : '⟨' : tail (concatMap f es) ++ "⟩"
 

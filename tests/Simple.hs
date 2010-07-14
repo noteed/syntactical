@@ -15,7 +15,7 @@ import qualified Holes
 instance Token String where
   toString = id
   operator pt as = List $
-    (Atom . concat $ previousPart pt ++ [partSymbol pt]) : as
+    (Atom . concat $ previous pt ++ [symbol pt]) : as
 
 table0 :: Table String
 table0 = buildTable

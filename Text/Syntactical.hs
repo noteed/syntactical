@@ -11,7 +11,7 @@ import Text.Syntactical.Data (
   infx_, prefx_, postfx_, closed_,
   sexpr, distfix,
   buildTable,
-  arity, partSymbol, nextPart, previousPart,
-  Associativity(..), Kind(..), Table, SExpr(..),
+  arity, symbol, next, previous,
+  Associativity(..), Hole(..), Table, SExpr(..),
   Token, toString, operator, consider
   )
