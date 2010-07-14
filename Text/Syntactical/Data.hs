@@ -1,11 +1,12 @@
 module Text.Syntactical.Data (
-  SExpr(..), Tree(..), Op(..), Opening(..), Associativity(..), Kind(..), Table,
+  SExpr(..), Tree(..), Op(..), Opening(..),
+  Associativity(..), Kind(..), Part(..), Table, Priority(..),
   infx, prefx, postfx, closed,
   infx_, prefx_, postfx_, closed_,
   sexpr, distfix,
   buildTable,
   begin, end, leftHole, rightHole, rightHoleKind, discard,
-  applicator, applicator', continue, lower,
+  applicator, applicator', continue, priority,
   arity, partSymbol, nextPart, previousPart,
   findBoth, findBegin, FindBegin(..),
   Token, toString, operator, consider
@@ -63,6 +64,8 @@ data Associativity = NonAssociative | LeftAssociative | RightAssociative
 
 type Precedence = Int
 
+data Priority = Lower | Higher | NoPriority
+
 newtype Table a = Table [Part a]
 
 infx :: Associativity -> a -> Op a
@@ -112,18 +115,18 @@ buildTable ls = Table . concat $ zipWith f ls [n, n - 1 .. 0]
   where n = length ls
         f l p = concatMap (cut . setPrecedence p) l
 
-lower :: Part a -> Part a -> Bool
-lower pt1 pt2 = case (associativity pt1, associativity pt2) of
+priority :: Part a -> Part a -> Priority
+priority pt1 pt2 = case (associativity pt1, associativity pt2) of
   (Just (a1,p1), Just (a2,p2)) | begin pt1 && end pt2 ->
     f a1 p1 a2 p2
-  _ | isMiddle pt1 || end pt1 && not (isLone pt1) -> True
-    | otherwise -> False
+  _ | isMiddle pt1 || end pt1 && not (isLone pt1) -> Lower
+    | otherwise -> Higher
   where f a1 p1 a2 p2
-          | a1 == NonAssociative && a2 == NonAssociative = error "cannot mix"
-          | a1 == LeftAssociative && p1 <= p2 = True
-          | a1 == RightAssociative && p1 < p2 = True
-          | a1 == NonAssociative && p1 <= p2 = True
-          | otherwise = False
+          | a1 == NonAssociative && a2 == NonAssociative = NoPriority
+          | a1 == LeftAssociative && p1 <= p2 = Lower
+          | a1 == RightAssociative && p1 < p2 = Lower
+          | a1 == NonAssociative && p1 <= p2 = Lower
+          | otherwise = Higher
 
 findParts :: Token a => Table a -> a -> [Part a]
 findParts (Table ps) x = filter ((consider x) . partSymbol) ps

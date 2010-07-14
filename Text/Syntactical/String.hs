@@ -6,7 +6,7 @@ module Text.Syntactical.String where
 import Data.List (intersperse)
 
 import Text.Syntactical.Data (
-  SExpr(..), Tree(..), Table, Op(..),
+  SExpr(..), Tree(..), Part(..), Table,
   partSymbol, previousPart,
   Token, toString, operator
   )
@@ -40,8 +40,8 @@ showFailure f = case f of
     concat (intersperse ", " $ map toString p) ++ " after " ++
     concat (intersperse " " $ map toString ps)
   CantMix a b ->
-     "Parse error: cannot mix operators " ++ showOp a ++
-     " and " ++ showOp b
+     "Parse error: cannot mix operators " ++ showPart a ++
+     " and " ++ showPart b
   MissingSubBetween a b ->
     "Parse error: no sub-expression between " ++ toString a ++
     " and " ++ toString b
@@ -53,8 +53,8 @@ showFailure f = case f of
     "Parsing raised a bug"
 
 -- TODO but the CantMix failure case is unused
-showOp :: Token a => Op a -> String
-showOp = undefined
+showPart :: Token a => Part a -> String
+showPart = undefined
 
 --TODO
 showRule :: Token a => Rule a -> String

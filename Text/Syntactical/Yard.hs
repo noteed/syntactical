@@ -25,9 +25,9 @@ module Text.Syntactical.Yard
   ) where
 
 import Text.Syntactical.Data (
-  SExpr(..), Tree(..), Op(..), Kind(..), Table,
+  SExpr(..), Tree(..), Op(..), Kind(..), Part(..), Table, Priority(..),
   begin, end, leftHole, rightHole, rightHoleKind, discard,
-  applicator, applicator', continue, lower,
+  applicator, applicator', continue, priority,
   arity, partSymbol, nextPart, previousPart,
   findBoth, findBegin, FindBegin(..),
   Token, operator
@@ -77,7 +77,7 @@ data Result a =
 data Failure a =
     MissingBefore [[a]] a -- ^ missing parts before part
   | MissingAfter [a] [a]  -- ^ missing parts after parts
-  | CantMix (Op a) (Op a) -- ^ can't mix two operators -- TODO this is unused...
+  | CantMix (Part a) (Part a) -- ^ can't mix two operators
   | MissingSubBetween a a -- ^ missing sub-expression between parts
   | MissingSubBefore a    -- ^ missing sub-expression before string
   | MissingSubAfter a     -- ^ missing sub-expression after string
@@ -184,9 +184,10 @@ step table sh@(S tt@(t@(Atom x):ts) st@(s@(Part y):ss) oo@(os:oss) ru) =
 
       | not (leftHole pt1) && begin pt1 = S ts (Part pt1:st) oo StackL
 
-      | pt1 `lower` y = S tt ss (apply s oo) FlushOp
-
-      | otherwise = S ts (Part pt1:st) oo StackOp
+      | otherwise = case pt1 `priority` y of
+        Lower -> S tt ss (apply s oo) FlushOp
+        Higher -> S ts (Part pt1:st) oo StackOp
+        NoPriority -> rule sh (failure $ CantMix pt1 y)
 
 -- No more tokens on the input stack, just have to flush
 -- the remaining applicators and/or operators.
