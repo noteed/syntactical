@@ -7,7 +7,7 @@ module Text.Syntactical.Data (
   buildTable,
   begin, end, leftOpen, rightOpen, rightHole, discard,
   applicator, applicator', continue, priority,
-  arity, symbol, next, previous,
+  arity, symbol, next, previous, current,
   findBoth, findBegin, FindBegin(..),
   Token, toString, operator, consider,
   showPart, showSExpr, showTree
@@ -325,8 +325,14 @@ previous (Last _ l _ _ _) = l
 previous (Lone _ _ _ _) = []
 previous (Middle l _ _ _) = l
 
+current :: Part a -> [a]
+current (First _ s _ _) = [s]
+current (Last _ l s _ _) = l ++ [s]
+current (Lone _ _ s _) = [s]
+current (Middle l s _ _) = l ++ [s]
+
 continue :: Token a => Part a -> Part a -> Bool
-continue x y = considers (previous x) (previous y ++ [symbol y])
+continue x y = considers (previous x) (current y)
 
 filterParts :: [Part a] -> ([Part a],[Part a],[Part a],[Part a])
 filterParts pts = (filter isLone pts, filter isFirst pts,
@@ -413,7 +419,7 @@ showTree :: Token a => Tree a -> String
 showTree = tail . f
   where
   f (Leaf s) = ' ' : toString s
-  f (Part y) = ' ' : concatMap toString (previous y ++ [symbol y])
+  f (Part y) = ' ' : concatMap toString (current y)
   f (Branch []) = ' ' : "⟨⟩"
   f (Branch es) = ' ' : '⟨' : tail (concatMap f es) ++ "⟩"
 

@@ -32,7 +32,7 @@ import Text.Syntactical.Data (
   Hole(..), Part(..), Table, Priority(..),
   begin, end, leftOpen, rightOpen, rightHole, discard,
   applicator, applicator', continue, priority,
-  arity, symbol, next, previous,
+  arity, symbol, next, current,
   findBoth, findBegin, FindBegin(..),
   Token, toString, operator,
   showPart, showSExpr, showTree
@@ -208,7 +208,7 @@ step _ sh@(S [] (s:ss) oo ru) = case s of
        | otherwise ->
     -- The operator is not complete.
     rule sh (failure $
-      next y `MissingAfter` (previous y ++ [symbol y]))
+      next y `MissingAfter` current y)
 
 -- The applicator/operator stack is empty.
 step table sh@(S (t:ts) [] oo ru) = case t of

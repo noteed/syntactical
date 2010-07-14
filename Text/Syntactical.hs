@@ -5,13 +5,14 @@ module Text.Syntactical (
   ) where
 
 import Text.Syntactical.Yard
-  (shunt, steps, Failure(..))
+  (shunt, steps, Failure(..), showFailure)
 import Text.Syntactical.Data (
   infx, prefx, postfx, closed,
   infx_, prefx_, postfx_, closed_,
   sexpr, distfix,
   buildTable,
-  arity, symbol, next, previous,
+  arity, symbol, next, previous, current,
   Associativity(..), Hole(..), Table, SExpr(..),
-  Token, toString, operator, consider
+  Token, toString, operator, consider,
+  showSExpr
   )
