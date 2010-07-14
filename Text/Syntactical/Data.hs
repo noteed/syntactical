@@ -13,39 +13,37 @@ module Text.Syntactical.Data (
   showPart, showSExpr, showTree
   ) where
 
-import Data.List
---import qualified Data.Map as M
+-- TODO the Part given to 'operator' doesn't hold enough information to
+-- reconstruct the whole Op. ('operator' should receive an Op instead of
+-- a Part.)
 
+import Data.List
+
+----------------------------------------------------------------------
+-- Data structures to represent trees, operators, and parts
+----------------------------------------------------------------------
+
+-- | The s-expression data type used as input and output of the parser.
 data SExpr a = List [SExpr a]
              | Atom a
   deriving (Eq, Show)
 
-showSExpr :: Token a => SExpr a -> String
-showSExpr = tail . f
-  where
-  f (Atom s) = ' ' : toString s
-  f (List []) = ' ' : "⟨⟩"
-  f (List es) = ' ' : '⟨' : tail (concatMap f es) ++ "⟩"
-
--- The s-expression data type, abstracting over the token type,
--- augmented to represent parts (used in the operator stack).
+-- | The s-expression data type augmented to represent parts (used in
+-- the operator stack).
 data Tree a = Branch [Tree a]
             | Leaf a
             | Part (Part a)
   deriving (Eq, Show)
 
-showTree :: Token a => Tree a -> String
-showTree = tail . f
-  where
-  f (Leaf s) = ' ' : toString s
-  f (Part y) = ' ' : concatMap toString (previousPart y ++ [partSymbol y])
-  f (Branch []) = ' ' : "⟨⟩"
-  f (Branch es) = ' ' : '⟨' : tail (concatMap f es) ++ "⟩"
-
+-- | The class of the types that can be parsed.
 class Token a where
   toString :: a -> String
+  -- ^ convert to a string (for showing purpose)
   operator :: Part a -> [SExpr a] -> SExpr a
+  -- ^ create an output node from a complete part and its arguments
   consider :: a -> a -> Bool
+  -- ^ test if two tokens are the same (used to find match from the
+  -- operator table)
 
   -- default definition for consider tests the string representation
   consider a b = toString a == toString b
@@ -53,322 +51,22 @@ class Token a where
 considers :: Token a => [a] -> [a] -> Bool
 considers a b = length a == length b && and (zipWith consider a b)
 
--- The boolean is to specify if the operator should show up
+-- | The operator representation. It allows infix, prefix, postfix,
+-- and closed operators, with possibly multiple internal holes.
+-- Different holes are possible, to drive the parse in specific ways.
+-- The boolean is used to specify if the operator should show up
 -- in the result or be discarded. The opening further specifies
--- if the operator is prefix, infix, or postfix.
--- e.g. ⟨1 2⟩ instead of ⟨+ 1 2⟩ when the + is retained.
--- e.g. 1 instead of ⟨! 1⟩ when the ! is retained.
--- e.g. ⟨1⟩ instead of ⟨! 1⟩ if the hole is also parsed as an s-expr.
+-- in the non-closed variant if the operator is prefix, infix, or postfix.
 data Op a =
     Op1 Bool a [(Kind,a)] Opening Associativity Precedence
   | Op2 Bool a [(Kind,a)] Kind a
   deriving (Eq, Show)
 
--- The Kind is used to give various behaviours when dealing
--- with internal holes. Maybe it could be extended to
--- support user-defined parsers, ot at least a specific
--- operator table.
--- SExpression means the 'content' of the hole should be
--- parsed as an s-expression.
--- Distfix means the 'content' of the hole should be parsed
--- as a distfix expression.
-data Kind = SExpression | Distfix
-  deriving (Eq, Show)
-
-data Associativity = NonAssociative | LeftAssociative | RightAssociative
-  deriving (Show, Eq)
-
-type Precedence = Int
-
-data Priority = Lower | Higher | NoPriority
-
-newtype Table a = Table [Part a]
-
-infx :: Associativity -> a -> Op a
--- TODO the associativity is present twice
-infx a f = Op1 True f [] (BothOpen a) a 0
-
-infx_ :: Associativity -> a -> Op a
-infx_ a f = Op1 False f [] (BothOpen a) a 0
-
-prefx :: a -> Op a
-prefx f = Op1 True f [] (RightOpen True) RightAssociative 0
-
-prefx_ :: a -> Op a
-prefx_ f = Op1 False f [] (RightOpen True) RightAssociative 0
-
-postfx :: a -> Op a
-postfx f = Op1 True f [] (LeftOpen True) RightAssociative 0
-
-postfx_ :: a -> Op a
-postfx_ f = Op1 False f [] (LeftOpen True) RightAssociative 0
-
-closed :: a -> Kind -> a -> Op a
-closed f k l = Op2 True f [] k l
-
-closed_ :: a -> Kind -> a -> Op a
-closed_ f k l = Op2 False f [] k l
-
-sexpr :: Op a -> a -> Op a
-sexpr (Op1 keep x rest opening a p) y = Op1 keep x (rest++[(SExpression,y)]) opening a p
-sexpr (Op2 keep x rest k y) z = Op2 keep x (rest++[(k,y)]) SExpression z
-
-distfix :: Op a -> a -> Op a
-distfix (Op1 keep x rest opening a p) y = Op1 keep x (rest++[(Distfix,y)]) opening a p
-distfix (Op2 keep x rest k y) z = Op2 keep x (rest++[(k,y)]) Distfix z
-
 setPrecedence :: Precedence -> Op a -> Op a
 setPrecedence p (Op1 keep x xs opening a _) = Op1 keep x xs opening a p
 setPrecedence _ c = c
 
--- buildTable constructs an operator table that can be
--- used with the shunt function. Operators are given
--- in decreasing precedence order.
--- TODO see if Parsec's buildExpressionParser uses a
--- incresing or decreasing list.
-buildTable :: [[Op a]] -> Table a
-buildTable ls = Table . concat $ zipWith f ls [n, n - 1 .. 0]
-  where n = length ls
-        f l p = concatMap (cut . setPrecedence p) l
-
-priority :: Part a -> Part a -> Priority
-priority pt1 pt2 = case (associativity pt1, associativity pt2) of
-  (Just (a1,p1), Just (a2,p2)) | begin pt1 && end pt2 ->
-    f a1 p1 a2 p2
-  _ | isMiddle pt1 || end pt1 && not (isLone pt1) -> Lower
-    | otherwise -> Higher
-  where f a1 p1 a2 p2
-          | a1 == NonAssociative && a2 == NonAssociative = NoPriority
-          | a1 == LeftAssociative && p1 <= p2 = Lower
-          | a1 == RightAssociative && p1 < p2 = Lower
-          | a1 == NonAssociative && p1 <= p2 = Lower
-          | otherwise = Higher
-
-findParts :: Token a => Table a -> a -> [Part a]
-findParts (Table ps) x = filter ((consider x) . partSymbol) ps
-
-applicator :: Token a => Table a -> SExpr a -> Bool
-applicator table (Atom x) = null $ findParts table x
-applicator _ (List _) = True
-
-applicator' :: Token a => Table a -> Tree a -> Bool
-applicator' table (Leaf x) = null $ findParts table x
-applicator' _ (Branch _) = True
-applicator' _ _ = False
-
-findContinuing :: Token a => [Part a] -> Part a -> Maybe (Part a)
-findContinuing xs y = case as of
-  [] -> Nothing
-  (a:_) -> Just $ if isLast a then groupLast as else groupMiddle as
-  where as = filter (`continue` y) xs
-
--- Search the operator stack for the top-most parts waiting to be completed
--- (i.e. on the left of an innner hole).
-findIncompletePart :: Table a -> [Tree a] -> Maybe (Part a)
-findIncompletePart _ [] = Nothing
-findIncompletePart _ (Part y:_) | not (end y) = Just y
-findIncompletePart table (_:ss) = findIncompletePart table ss
-
--- - The operator doesn't contain any operator
--- -> returns (First,Nothing)
--- - The operator stack has an operator at its top and
--- no incomplete operator
--- -> returns (First,Just Top)
--- - The operator stack has no operator at its top but
--- has an incomplete operator below
--- -> return (Continuing of First, Nothing)
--- - The operator stack has an operator at its top and
--- an incomplete operator (at the top or below)
--- -> returns (Continuing or First, Just Top)
--- Actually, if there is no Continuing, returns what it can
--- find, even if it is not First; one of the rules will
--- generate a MissingBefore (in the [] case) or an Incomplete
--- (in the pts2 case).
-findBoth :: Token a => Table a -> a -> [Tree a] -> Either (Part a) (FindBegin a)
-findBoth table x st = case findIncompletePart table st of
-  Nothing -> Right $ findBegin table x
-  Just y -> case findContinuing xs y of
-    Just a -> Left a
-    Nothing -> Right $ findBegin table x
-  where xs = findParts table x
-
-filterParts :: [Part a] -> ([Part a],[Part a],[Part a],[Part a])
-filterParts pts = (filter isLone pts, filter isFirst pts,
-  filter isMiddle pts, filter isLast pts)
-
--- NoBegin: no parts with the requested symbol.
--- Begin: found a begin part.
--- MissingBegin: no begin part found but continuing part found.
-data FindBegin a = NoBegin | Begin (Part a) | MissingBegin [[a]]
-
-findBegin :: Token a => Table a -> a -> FindBegin a
-findBegin table x = case filterParts $ findParts table x of
-  ([],[],[],[]) -> NoBegin
-  ((_:_),(_:_),_,_) -> error "findBegin: ambiguous: lone or first part"
-  -- TODO the ambiguity is present when they share the same prefix
-  --(_,_,(_:_),(_:_)) -> error "findBegin: ambiguous: middle or last part"
-  (l@(_:_),_,_,_) -> Begin $ groupLone l
-  (_,f@(_:_),_,_) -> Begin $ groupFirst f
-  (_,_,m,l) -> MissingBegin $ map previousPart (m++l)
-
-groupLone :: [Part a] -> Part a
-groupLone [pt] = pt
-groupLone [] = error "groupLone: empty list"
-groupLone _ = error "groupLone: ambiguous lone part, only one allowed"
-
-groupFirst :: Token a => [Part a] -> Part a
-groupFirst [] = error "groupFirst: empty list"
-groupFirst (First a' x s' k':pts) = go a' s' k' pts
-  where go a s k [] = First a x s k
-        go a s k (First a2 _ s2 k2:xs)
-          | a == a2 && k == k2 = go a (unionBy consider s s2) k xs
-        go _ _ _ _ = error "groupFirst: ambiguous first parts"
-groupFirst _ = error "groupFirst: not a First part"
-
-groupMiddle :: Token a => [Part a] -> Part a
-groupMiddle [] = error "groupMiddle: empty list"
-groupMiddle (Middle ss' x s' k':pts) = go ss' s' k' pts
-  where go ss s k [] = Middle ss x s k
-        go ss s k (Middle ss2 _ s2 k2:xs)
-          | not (considers ss ss2) = error "groupMiddle: different prefix"
-          | k == k2 = go ss (unionBy consider s s2) k xs
-        go _ _ _ _ = error "groupMiddle: ambiguous middle parts"
-groupMiddle _ = error "groupMiddle: not a Middle part"
-
-groupLast :: [Part a] -> Part a
-groupLast [] = error "groupLast: empty list"
-groupLast [l@(Last _ _ _ _ _)] = l
-groupLast _ = error "groupLast: not a Last part"
-
--- Parts
--- Examples:
--- if_then_else_ : Prefix
--- \    \    \
---  \    \    - Last True   - last part with a hole on its right,
---   \    \                   the hole on its left is implied.
---    \    ---- Middle      - middle part, the two holes are implied.
---     -------- First False - first part with no hole on its left,
---                            the hole on its right is implied.
---
--- _+_ : Infix
---  \
---   - Lone BothOpen  - first and last part, with two holes.
---
--- _! : Postfix
---   \
---    - Lone LeftOpen - first and last part, with a left hole.
-
-data Part a = First (Maybe (Associativity,Precedence)) a [a] Kind
--- assoc/prec if it is open, possible successor parts, non-empty, s-expr/distfix
-          | Last (Maybe (Associativity,Precedence)) [a] a Bool Int
--- assoc/prec if it is open, possible predecessor parts, non-empty, keep/discard, arity
-          | Lone Opening Precedence a Bool
--- opening, precedence, keep/discard
-          | Middle [a] a [a] Kind
--- possible predecessor and successor parts, both non-empty, s-expr/distfix
-  deriving (Show, Eq)
-
--- TODO
-showPart :: Token a => Part a -> String
-showPart = undefined
-
-isLone :: Part a -> Bool
-isLone (Lone _ _ _ _) = True
-isLone _ = False
-
-isFirst :: Part a -> Bool
-isFirst (First _ _ _ _) = True
-isFirst _ = False
-
-isLast :: Part a -> Bool
-isLast (Last _ _ _ _ _) = True
-isLast _ = False
-
-isMiddle :: Part a -> Bool
-isMiddle (Middle _ _ _ _) = True
-isMiddle _ = False
-
-begin :: Part a -> Bool
-begin (Lone _ _ _ _) = True
-begin (First _ _ _ _) = True
-begin _ = False
-
-end :: Part a -> Bool
-end (Lone _ _ _ _) = True
-end (Last _ _ _ _ _) = True
-end _ = False
-
-discard :: Part a -> Bool
-discard (First _ _ _ _) = False
-discard (Last _ _ _ keep _) = not keep
-discard (Lone _ _ _ keep) = not keep
-discard (Middle _ _ _ _) = False
-
-partSymbol :: Part a -> a
-partSymbol (First _ s _ _) = s
-partSymbol (Last _ _ s _ _) = s
-partSymbol (Lone _ _ s _) = s
-partSymbol (Middle _ s _ _) = s
-
-arity :: Part a -> Int
-arity (First _ _ _ _) = error "arity: bad argument"
-arity (Middle _ _ _ _) = error "arity: bad argument"
-arity (Lone (BothOpen _) _ _ _) = 2
-arity (Lone _ _ _ _) = 1
-arity (Last _ _ _ _ ar) = ar
-
-data Opening = LeftOpen Bool
-             | RightOpen Bool
-             | BothOpen Associativity
-  deriving (Show, Eq)
-
-leftHole :: Part a -> Bool
-leftHole (First (Just _) _ _ _) = True
-leftHole (First _ _ _ _) = False
-leftHole (Last _ _ _ _ _) = True
-leftHole (Lone (RightOpen _) _ _ _) = False
-leftHole (Lone _ _ _ _) = True
-leftHole (Middle _ _ _ _) = True
-
-rightHole :: Part a -> Bool
-rightHole (First _ _ _ _) = True
-rightHole (Last (Just _) _ _ _ _) = True
-rightHole (Last _ _ _ _ _) = False
-rightHole (Lone (LeftOpen _) _ _ _) = False
-rightHole (Lone _ _ _ _) = True
-rightHole (Middle _ _ _ _) = True
-
-rightHoleKind :: Part a -> Maybe Kind
-rightHoleKind (First _ _ _ k) = Just k
-rightHoleKind (Last _ _ _ _ _) = Nothing
-rightHoleKind (Lone _ _ _ _) = Nothing
-rightHoleKind (Middle _ _ _ k) = Just k
-
-associativity :: Part a -> Maybe (Associativity,Precedence)
-associativity (First ap _ _ _) = ap
-associativity (Last ap _ _ _ _) = ap
-associativity (Lone (LeftOpen a) p _ _) = Just (a',p)
-  where a' = if a then LeftAssociative else NonAssociative
-associativity (Lone (RightOpen a) p _ _) = Just (a',p)
-  where a' = if a then RightAssociative else NonAssociative
-associativity (Lone (BothOpen a) p _ _) = Just (a,p)
-associativity (Middle _ _ _ _) = Nothing
-
-nextPart :: Part a -> [a]
-nextPart (First _ _ r _) = r
-nextPart (Last _ _ _ _ _) = []
-nextPart (Lone _ _ _ _) = []
-nextPart (Middle _ _ r _) = r
-
-previousPart :: Part a -> [a]
-previousPart (First _ _ _ _) = []
-previousPart (Last _ l _ _ _) = l
-previousPart (Lone _ _ _ _) = []
-previousPart (Middle l _ _ _) = l
-
-continue :: Token a => Part a -> Part a -> Bool
-continue x y = considers (previousPart x) (previousPart y ++ [partSymbol y])
-
+-- ^ Separate an operator in its different parts.
 cut :: Op a -> [Part a]
 cut (Op1 keep x [] opening _ p) =
   [Lone opening p x keep]
@@ -417,9 +115,309 @@ holesAfter [] h = (h, [])
 holesAfter [(a,b)] h = (a, [(b,h)])
 holesAfter ((a,b):xs@((c,_):_)) h = (a, (b,c) : snd (holesAfter xs h))
 
--- TODO here and for groupXxx, make distinct data type for Lone, First, Middle and Last)
--- partMap :: Table -> (M.Map String Part, M.Map String Part, M.Map String Part, M.Map String Part)
--- partMap (Table ops) =
---  where
---    (lones, fs, ms, ls) = filterParts $ concatMap cut ops
+-- buildTable constructs an operator table that can be
+-- used with the shunt function. Operators are given
+-- in decreasing precedence order.
+-- TODO see if Parsec's buildExpressionParser uses a
+-- incresing or decreasing list.
+buildTable :: [[Op a]] -> Table a
+buildTable ls = Table . concat $ zipWith f ls [n, n - 1 .. 0]
+  where n = length ls
+        f l p = concatMap (cut . setPrecedence p) l
+
+-- | The Kind is used to give various behaviours when dealing
+-- with internal holes.
+-- SExpression means the 'content' of the hole should be
+-- parsed as an s-expression.
+-- Distfix means the 'content' of the hole should be parsed
+-- as a distfix expression.
+data Kind = SExpression | Distfix
+  deriving (Eq, Show)
+
+data Associativity = NonAssociative | LeftAssociative | RightAssociative
+  deriving (Show, Eq)
+
+type Precedence = Int
+
+data Priority = Lower | Higher | NoPriority
+
+newtype Table a = Table [Part a]
+
+-- NoBegin: no parts with the requested symbol.
+-- Begin: found a begin part.
+-- MissingBegin: no begin part found but continuing part found.
+data FindBegin a = NoBegin | Begin (Part a) | MissingBegin [[a]]
+
+findParts :: Token a => Table a -> a -> [Part a]
+findParts (Table ps) x = filter ((consider x) . partSymbol) ps
+
+findContinuing :: Token a => [Part a] -> Part a -> Maybe (Part a)
+findContinuing xs y = case as of
+  [] -> Nothing
+  (a:_) -> Just $ if isLast a then groupLast as else groupMiddle as
+  where as = filter (`continue` y) xs
+
+-- Search the operator stack for the top-most parts waiting to be completed
+-- (i.e. on the left of an innner hole).
+findIncompletePart :: Table a -> [Tree a] -> Maybe (Part a)
+findIncompletePart _ [] = Nothing
+findIncompletePart _ (Part y:_) | not (end y) = Just y
+findIncompletePart table (_:ss) = findIncompletePart table ss
+
+-- - The operator doesn't contain any operator
+-- -> returns (First,Nothing)
+-- - The operator stack has an operator at its top and
+-- no incomplete operator
+-- -> returns (First,Just Top)
+-- - The operator stack has no operator at its top but
+-- has an incomplete operator below
+-- -> return (Continuing of First, Nothing)
+-- - The operator stack has an operator at its top and
+-- an incomplete operator (at the top or below)
+-- -> returns (Continuing or First, Just Top)
+-- Actually, if there is no Continuing, returns what it can
+-- find, even if it is not First; one of the rules will
+-- generate a MissingBefore (in the [] case) or an Incomplete
+-- (in the pts2 case).
+findBoth :: Token a => Table a -> a -> [Tree a] -> Either (Part a) (FindBegin a)
+findBoth table x st = case findIncompletePart table st of
+  Nothing -> Right $ findBegin table x
+  Just y -> case findContinuing xs y of
+    Just a -> Left a
+    Nothing -> Right $ findBegin table x
+  where xs = findParts table x
+
+findBegin :: Token a => Table a -> a -> FindBegin a
+findBegin table x = case filterParts $ findParts table x of
+  ([],[],[],[]) -> NoBegin
+  ((_:_),(_:_),_,_) -> error "findBegin: ambiguous: lone or first part"
+  -- TODO the ambiguity is present when they share the same prefix
+  --(_,_,(_:_),(_:_)) -> error "findBegin: ambiguous: middle or last part"
+  (l@(_:_),_,_,_) -> Begin $ groupLone l
+  (_,f@(_:_),_,_) -> Begin $ groupFirst f
+  (_,_,m,l) -> MissingBegin $ map previousPart (m++l)
+
+-- | A Part represent a single symbol of an operator.
+data Part a = First (Maybe (Associativity,Precedence)) a [a] Kind
+-- assoc/prec if it is open, possible successor parts, non-empty, s-expr/distfix
+          | Last (Maybe (Associativity,Precedence)) [a] a Bool Int
+-- assoc/prec if it is open, possible predecessor parts, non-empty, keep/discard, arity
+          | Lone Opening Precedence a Bool
+-- opening, precedence, keep/discard
+          | Middle [a] a [a] Kind
+-- possible predecessor and successor parts, both non-empty, s-expr/distfix
+  deriving (Show, Eq)
+
+-- Specify if an Op1 or a Lone is prefix, postfix, or infix.
+data Opening = LeftOpen Bool
+             | RightOpen Bool
+             | BothOpen Associativity
+  deriving (Show, Eq)
+
+priority :: Part a -> Part a -> Priority
+priority pt1 pt2 = case (associativity pt1, associativity pt2) of
+  (Just (a1,p1), Just (a2,p2)) | begin pt1 && end pt2 ->
+    f a1 p1 a2 p2
+  _ | isMiddle pt1 || end pt1 && not (isLone pt1) -> Lower
+    | otherwise -> Higher
+  where f a1 p1 a2 p2
+          | a1 == NonAssociative && a2 == NonAssociative = NoPriority
+          | a1 == LeftAssociative && p1 <= p2 = Lower
+          | a1 == RightAssociative && p1 < p2 = Lower
+          | a1 == NonAssociative && p1 <= p2 = Lower
+          | otherwise = Higher
+
+applicator :: Token a => Table a -> SExpr a -> Bool
+applicator table (Atom x) = null $ findParts table x
+applicator _ (List _) = True
+
+applicator' :: Token a => Table a -> Tree a -> Bool
+applicator' table (Leaf x) = null $ findParts table x
+applicator' _ (Branch _) = True
+applicator' _ _ = False
+
+isLone :: Part a -> Bool
+isLone (Lone _ _ _ _) = True
+isLone _ = False
+
+isFirst :: Part a -> Bool
+isFirst (First _ _ _ _) = True
+isFirst _ = False
+
+isLast :: Part a -> Bool
+isLast (Last _ _ _ _ _) = True
+isLast _ = False
+
+isMiddle :: Part a -> Bool
+isMiddle (Middle _ _ _ _) = True
+isMiddle _ = False
+
+begin :: Part a -> Bool
+begin (Lone _ _ _ _) = True
+begin (First _ _ _ _) = True
+begin _ = False
+
+end :: Part a -> Bool
+end (Lone _ _ _ _) = True
+end (Last _ _ _ _ _) = True
+end _ = False
+
+discard :: Part a -> Bool
+discard (First _ _ _ _) = False
+discard (Last _ _ _ keep _) = not keep
+discard (Lone _ _ _ keep) = not keep
+discard (Middle _ _ _ _) = False
+
+partSymbol :: Part a -> a
+partSymbol (First _ s _ _) = s
+partSymbol (Last _ _ s _ _) = s
+partSymbol (Lone _ _ s _) = s
+partSymbol (Middle _ s _ _) = s
+
+arity :: Part a -> Int
+arity (First _ _ _ _) = error "arity: bad argument"
+arity (Middle _ _ _ _) = error "arity: bad argument"
+arity (Lone (BothOpen _) _ _ _) = 2
+arity (Lone _ _ _ _) = 1
+arity (Last _ _ _ _ ar) = ar
+
+leftHole :: Part a -> Bool
+leftHole (First (Just _) _ _ _) = True
+leftHole (First _ _ _ _) = False
+leftHole (Last _ _ _ _ _) = True
+leftHole (Lone (RightOpen _) _ _ _) = False
+leftHole (Lone _ _ _ _) = True
+leftHole (Middle _ _ _ _) = True
+
+rightHole :: Part a -> Bool
+rightHole (First _ _ _ _) = True
+rightHole (Last (Just _) _ _ _ _) = True
+rightHole (Last _ _ _ _ _) = False
+rightHole (Lone (LeftOpen _) _ _ _) = False
+rightHole (Lone _ _ _ _) = True
+rightHole (Middle _ _ _ _) = True
+
+rightHoleKind :: Part a -> Maybe Kind
+rightHoleKind (First _ _ _ k) = Just k
+rightHoleKind (Last _ _ _ _ _) = Nothing
+rightHoleKind (Lone _ _ _ _) = Nothing
+rightHoleKind (Middle _ _ _ k) = Just k
+
+associativity :: Part a -> Maybe (Associativity,Precedence)
+associativity (First ap _ _ _) = ap
+associativity (Last ap _ _ _ _) = ap
+associativity (Lone (LeftOpen a) p _ _) = Just (a',p)
+  where a' = if a then LeftAssociative else NonAssociative
+associativity (Lone (RightOpen a) p _ _) = Just (a',p)
+  where a' = if a then RightAssociative else NonAssociative
+associativity (Lone (BothOpen a) p _ _) = Just (a,p)
+associativity (Middle _ _ _ _) = Nothing
+
+nextPart :: Part a -> [a]
+nextPart (First _ _ r _) = r
+nextPart (Last _ _ _ _ _) = []
+nextPart (Lone _ _ _ _) = []
+nextPart (Middle _ _ r _) = r
+
+previousPart :: Part a -> [a]
+previousPart (First _ _ _ _) = []
+previousPart (Last _ l _ _ _) = l
+previousPart (Lone _ _ _ _) = []
+previousPart (Middle l _ _ _) = l
+
+continue :: Token a => Part a -> Part a -> Bool
+continue x y = considers (previousPart x) (previousPart y ++ [partSymbol y])
+
+filterParts :: [Part a] -> ([Part a],[Part a],[Part a],[Part a])
+filterParts pts = (filter isLone pts, filter isFirst pts,
+  filter isMiddle pts, filter isLast pts)
+
+groupLone :: [Part a] -> Part a
+groupLone [pt] = pt
+groupLone [] = error "groupLone: empty list"
+groupLone _ = error "groupLone: ambiguous lone part, only one allowed"
+
+groupFirst :: Token a => [Part a] -> Part a
+groupFirst [] = error "groupFirst: empty list"
+groupFirst (First a' x s' k':pts) = go a' s' k' pts
+  where go a s k [] = First a x s k
+        go a s k (First a2 _ s2 k2:xs)
+          | a == a2 && k == k2 = go a (unionBy consider s s2) k xs
+        go _ _ _ _ = error "groupFirst: ambiguous first parts"
+groupFirst _ = error "groupFirst: not a First part"
+
+groupMiddle :: Token a => [Part a] -> Part a
+groupMiddle [] = error "groupMiddle: empty list"
+groupMiddle (Middle ss' x s' k':pts) = go ss' s' k' pts
+  where go ss s k [] = Middle ss x s k
+        go ss s k (Middle ss2 _ s2 k2:xs)
+          | not (considers ss ss2) = error "groupMiddle: different prefix"
+          | k == k2 = go ss (unionBy consider s s2) k xs
+        go _ _ _ _ = error "groupMiddle: ambiguous middle parts"
+groupMiddle _ = error "groupMiddle: not a Middle part"
+
+groupLast :: [Part a] -> Part a
+groupLast [] = error "groupLast: empty list"
+groupLast [l@(Last _ _ _ _ _)] = l
+groupLast _ = error "groupLast: not a Last part"
+
+----------------------------------------------------------------------
+-- Combinators to construct the operator table
+----------------------------------------------------------------------
+
+infx :: Associativity -> a -> Op a
+-- TODO the associativity is present twice
+infx a f = Op1 True f [] (BothOpen a) a 0
+
+infx_ :: Associativity -> a -> Op a
+infx_ a f = Op1 False f [] (BothOpen a) a 0
+
+prefx :: a -> Op a
+prefx f = Op1 True f [] (RightOpen True) RightAssociative 0
+
+prefx_ :: a -> Op a
+prefx_ f = Op1 False f [] (RightOpen True) RightAssociative 0
+
+postfx :: a -> Op a
+postfx f = Op1 True f [] (LeftOpen True) RightAssociative 0
+
+postfx_ :: a -> Op a
+postfx_ f = Op1 False f [] (LeftOpen True) RightAssociative 0
+
+closed :: a -> Kind -> a -> Op a
+closed f k l = Op2 True f [] k l
+
+closed_ :: a -> Kind -> a -> Op a
+closed_ f k l = Op2 False f [] k l
+
+sexpr :: Op a -> a -> Op a
+sexpr (Op1 keep x rest opening a p) y = Op1 keep x (rest++[(SExpression,y)]) opening a p
+sexpr (Op2 keep x rest k y) z = Op2 keep x (rest++[(k,y)]) SExpression z
+
+distfix :: Op a -> a -> Op a
+distfix (Op1 keep x rest opening a p) y = Op1 keep x (rest++[(Distfix,y)]) opening a p
+distfix (Op2 keep x rest k y) z = Op2 keep x (rest++[(k,y)]) Distfix z
+
+----------------------------------------------------------------------
+-- A few 'show' functions for SExpr, and Tree
+----------------------------------------------------------------------
+
+showSExpr :: Token a => SExpr a -> String
+showSExpr = tail . f
+  where
+  f (Atom s) = ' ' : toString s
+  f (List []) = ' ' : "⟨⟩"
+  f (List es) = ' ' : '⟨' : tail (concatMap f es) ++ "⟩"
+
+showTree :: Token a => Tree a -> String
+showTree = tail . f
+  where
+  f (Leaf s) = ' ' : toString s
+  f (Part y) = ' ' : concatMap toString (previousPart y ++ [partSymbol y])
+  f (Branch []) = ' ' : "⟨⟩"
+  f (Branch es) = ' ' : '⟨' : tail (concatMap f es) ++ "⟩"
+
+-- TODO
+showPart :: Token a => Part a -> String
+showPart = undefined
 
