@@ -71,4 +71,19 @@ Future and/or wishes
   to use closed "[" (Repeat ";") "]" and closed "[" (Repeat ",") "]" in the
   same operator table. The [,] (and [;]) would be user-constructed by adding a
   'list' method to the Token class.
+- Make use of the reparsing capability (the input and output type is the same).
+  E.g. it would be possible to differentiate between different kind of holes
+  based on its right part (by leaving it unparsed, then parsing it when the
+  right part is known).
+- The biggest problem of this approach is that the parser can accept a lot of
+  invalid inputs. Probably a good approach would be to use s-expression
+  grammars.
+- Turn the library into a command-line tool to generate parsers.
+
+Before pushing to Hackage
+-------------------------
+
+- Eliminate all the TODOs
+- Write the doc
+- Make sure it installs cleanly with cabal
 
