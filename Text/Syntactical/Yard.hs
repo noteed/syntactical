@@ -3,13 +3,10 @@
 -- application by juxtaposition (without any paren around the arguments)
 -- and distfix operators.
 
--- TODO make sure the rules reflect what's going on, a same
--- rule should be associated to a same behavior.
 -- TODO is ! a + b allowed if ! and + have the same precedence?
 -- TODO use HPC to see if tests cover the code.
 -- TODO maybe feed random tokens to the algorithm to see if it can crash.
 -- TODO use hlint.
--- TODO write more realistic example (for a Haskell-like syntax)
 
 -- Note: The parser allows applying a number to another,
 -- e.g. 1 2. Maybe this could be turned into an option.
@@ -29,7 +26,7 @@ import Text.Syntactical.Data (
   SExpr(..), Tree(..),
   Hole(..), Part(..), Table, Priority(..),
   begin, end, leftOpen, rightOpen, rightHole, discard,
-  applicator, applicator', continue, priority,
+  applicator, applicator', continue, original, priority,
   arity, symbol, next, current,
   findBoth, findBegin, FindBegin(..),
   Token, toString, operator,
@@ -237,10 +234,10 @@ step _ sh = rule sh (failure Unexpected)
 -- Construct a new output stack by applying an operator,
 -- a symbol, or a list to the top of the output stack.
 apply :: Token a => Tree a -> [[SExpr a]] -> [[SExpr a]]
-apply (Part y) (os:oss) =
+apply (Part y) (os:oss) | end y =
   if length l /= nargs
   then error $ "can't happen" -- holes are always filled by one expression
-  else (operator y (reverse l) : r) : oss
+  else (operator (original y) (reverse l) : r) : oss
   where nargs = arity y
         (l,r) = splitAt nargs os
 apply (Leaf x) (os:h:oss) =  (ap:h):oss

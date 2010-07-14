@@ -6,8 +6,8 @@ module Text.Syntactical.Data (
   sexpr, distfix,
   buildTable,
   begin, end, leftOpen, rightOpen, rightHole, discard,
-  applicator, applicator', continue, priority,
-  arity, symbol, next, previous, current,
+  applicator, applicator', continue, original, priority,
+  arity, symbol, symbols, next, previous, current,
   findBoth, findBegin, FindBegin(..),
   Token, toString, operator, consider,
   showPart, showSExpr, showTree
@@ -39,8 +39,8 @@ data Tree a = Branch [Tree a]
 class Token a where
   toString :: a -> String
   -- ^ convert to a string (for showing purpose)
-  operator :: Part a -> [SExpr a] -> SExpr a
-  -- ^ create an output node from a complete part and its arguments
+  operator :: Op a -> [SExpr a] -> SExpr a
+  -- ^ create an output node from an operator and its arguments
   consider :: a -> a -> Bool
   -- ^ test if two tokens are the same (used to find match from the
   -- operator table)
@@ -66,14 +66,18 @@ setPrecedence :: Precedence -> Op a -> Op a
 setPrecedence p (Op1 keep x xs opening a _) = Op1 keep x xs opening a p
 setPrecedence _ c = c
 
+symbols :: Op a -> [a]
+symbols (Op1 _ a xs _ _ _) = a : map snd xs
+symbols (Op2 _ a xs _ b) = a : map snd xs ++ [b]
+
 -- ^ Separate an operator in its different parts.
 cut :: Op a -> [Part a]
-cut (Op1 keep x [] opening _ p) =
-  [Lone opening p x keep]
-cut (Op1 _ x xs opening a p) =
+cut o@(Op1 keep x [] opening _ p) =
+  [Lone o opening p x keep]
+cut o@(Op1 _ x xs opening a p) =
   First ma x [snd $ head xs] (fst $ head xs) :
   map f (zip4 ls ss rs ks) ++
-  [Last mb (x:(map snd $ init xs)) (snd $ last xs) True ar]
+  [Last o mb (x:(map snd $ init xs)) (snd $ last xs) True ar]
   where
     j = Just (a,p)
     (ma,mb,ar) = case opening of
@@ -89,12 +93,12 @@ cut (Op1 _ x xs opening a p) =
     rs = map ((++[snd $ last xs]) . tail) (tail fxs)
     ks = map head (tail sxs)
 
-cut (Op2 keep x [] h y) =
-  [First Nothing x [y] h, Last Nothing [x] y keep 1]
-cut (Op2 keep x xs h y) =
+cut o@(Op2 keep x [] h y) =
+  [First Nothing x [y] h, Last o Nothing [x] y keep 1]
+cut o@(Op2 keep x xs h y) =
   First Nothing x [snd $ head xs] (fst $ head xs) :
   map f (zip4 ls ss rs ks) ++
-  [Last Nothing (x:map snd xs) y keep ar]
+  [Last o Nothing (x:map snd xs) y keep ar]
   where
     f (l, s, r, k) = Middle l s r k
     (_, xs') = holesAfter xs h
@@ -195,12 +199,15 @@ findBegin table x = case filterParts $ findParts table x of
   (_,f@(_:_),_,_) -> Begin $ groupFirst f
   (_,_,m,l) -> MissingBegin $ map previous (m++l)
 
+-- TODO the complete Op inside then Last and Lone Part makes the other fields
+-- unnecessary.
+
 -- | A Part represent a single symbol of an operator.
 data Part a = First (Maybe (Associativity,Precedence)) a [a] Hole
 -- assoc/prec if it is open, possible successor parts, non-empty, s-expr/distfix
-          | Last (Maybe (Associativity,Precedence)) [a] a Bool Int
+          | Last (Op a) (Maybe (Associativity,Precedence)) [a] a Bool Int
 -- assoc/prec if it is open, possible predecessor parts, non-empty, keep/discard, arity
-          | Lone Opening Precedence a Bool
+          | Lone (Op a) Opening Precedence a Bool
 -- opening, precedence, keep/discard
           | Middle [a] a [a] Hole
 -- possible predecessor and successor parts, both non-empty, s-expr/distfix
@@ -211,6 +218,11 @@ data Opening = LeftOpen Bool
              | RightOpen Bool
              | BothOpen Associativity
   deriving (Show, Eq)
+
+original :: Part a -> Op a
+original (Lone o _ _ _ _) = o
+original (Last o _ _ _ _ _) = o
+original _ = error "can't happen"
 
 priority :: Part a -> Part a -> Priority
 priority pt1 pt2 = case (associativity pt1, associativity pt2) of
@@ -235,7 +247,7 @@ applicator' _ (Branch _) = True
 applicator' _ _ = False
 
 isLone :: Part a -> Bool
-isLone (Lone _ _ _ _) = True
+isLone (Lone _ _ _ _ _) = True
 isLone _ = False
 
 isFirst :: Part a -> Bool
@@ -243,7 +255,7 @@ isFirst (First _ _ _ _) = True
 isFirst _ = False
 
 isLast :: Part a -> Bool
-isLast (Last _ _ _ _ _) = True
+isLast (Last _ _ _ _ _ _) = True
 isLast _ = False
 
 isMiddle :: Part a -> Bool
@@ -251,82 +263,82 @@ isMiddle (Middle _ _ _ _) = True
 isMiddle _ = False
 
 begin :: Part a -> Bool
-begin (Lone _ _ _ _) = True
+begin (Lone _ _ _ _ _) = True
 begin (First _ _ _ _) = True
 begin _ = False
 
 end :: Part a -> Bool
-end (Lone _ _ _ _) = True
-end (Last _ _ _ _ _) = True
+end (Lone _ _ _ _ _) = True
+end (Last _ _ _ _ _ _) = True
 end _ = False
 
 discard :: Part a -> Bool
 discard (First _ _ _ _) = False
-discard (Last _ _ _ keep _) = not keep
-discard (Lone _ _ _ keep) = not keep
+discard (Last _ _ _ _ keep _) = not keep
+discard (Lone _ _ _ _ keep) = not keep
 discard (Middle _ _ _ _) = False
 
 symbol :: Part a -> a
 symbol (First _ s _ _) = s
-symbol (Last _ _ s _ _) = s
-symbol (Lone _ _ s _) = s
+symbol (Last _ _ _ s _ _) = s
+symbol (Lone _ _ _ s _) = s
 symbol (Middle _ s _ _) = s
 
 arity :: Part a -> Int
 arity (First _ _ _ _) = error "arity: bad argument"
 arity (Middle _ _ _ _) = error "arity: bad argument"
-arity (Lone (BothOpen _) _ _ _) = 2
-arity (Lone _ _ _ _) = 1
-arity (Last _ _ _ _ ar) = ar
+arity (Lone _ (BothOpen _) _ _ _) = 2
+arity (Lone _ _ _ _ _) = 1
+arity (Last _ _ _ _ _ ar) = ar
 
 leftOpen :: Part a -> Bool
 leftOpen (First (Just _) _ _ _) = True
 leftOpen (First _ _ _ _) = False
-leftOpen (Last _ _ _ _ _) = True
-leftOpen (Lone (RightOpen _) _ _ _) = False
-leftOpen (Lone _ _ _ _) = True
+leftOpen (Last _ _ _ _ _ _) = True
+leftOpen (Lone _ (RightOpen _) _ _ _) = False
+leftOpen (Lone _ _ _ _ _) = True
 leftOpen (Middle _ _ _ _) = True
 
 rightOpen :: Part a -> Bool
 rightOpen (First _ _ _ _) = True
-rightOpen (Last (Just _) _ _ _ _) = True
-rightOpen (Last _ _ _ _ _) = False
-rightOpen (Lone (LeftOpen _) _ _ _) = False
-rightOpen (Lone _ _ _ _) = True
+rightOpen (Last _ (Just _) _ _ _ _) = True
+rightOpen (Last _ _ _ _ _ _) = False
+rightOpen (Lone _ (LeftOpen _) _ _ _) = False
+rightOpen (Lone _ _ _ _ _) = True
 rightOpen (Middle _ _ _ _) = True
 
 rightHole :: Part a -> Maybe Hole
 rightHole (First _ _ _ k) = Just k
-rightHole (Last _ _ _ _ _) = Nothing
-rightHole (Lone _ _ _ _) = Nothing
+rightHole (Last _ _ _ _ _ _) = Nothing
+rightHole (Lone _ _ _ _ _) = Nothing
 rightHole (Middle _ _ _ k) = Just k
 
 associativity :: Part a -> Maybe (Associativity,Precedence)
 associativity (First ap _ _ _) = ap
-associativity (Last ap _ _ _ _) = ap
-associativity (Lone (LeftOpen a) p _ _) = Just (a',p)
+associativity (Last _ ap _ _ _ _) = ap
+associativity (Lone _ (LeftOpen a) p _ _) = Just (a',p)
   where a' = if a then LeftAssociative else NonAssociative
-associativity (Lone (RightOpen a) p _ _) = Just (a',p)
+associativity (Lone _ (RightOpen a) p _ _) = Just (a',p)
   where a' = if a then RightAssociative else NonAssociative
-associativity (Lone (BothOpen a) p _ _) = Just (a,p)
+associativity (Lone _ (BothOpen a) p _ _) = Just (a,p)
 associativity (Middle _ _ _ _) = Nothing
 
 next :: Part a -> [a]
 next (First _ _ r _) = r
-next (Last _ _ _ _ _) = []
-next (Lone _ _ _ _) = []
+next (Last _ _ _ _ _ _) = []
+next (Lone _ _ _ _ _) = []
 next (Middle _ _ r _) = r
 
 previous :: Part a -> [a]
 previous (First _ _ _ _) = []
-previous (Last _ l _ _ _) = l
-previous (Lone _ _ _ _) = []
+previous (Last _ _ l _ _ _) = l
+previous (Lone _ _ _ _ _) = []
 previous (Middle l _ _ _) = l
 
 current :: Part a -> [a]
 current (First _ s _ _) = [s]
-current (Last _ l s _ _) = l ++ [s]
-current (Lone _ _ s _) = [s]
+current (Last _ _ l s _ _) = l ++ [s]
+current (Lone _ _ _ s _) = [s]
 current (Middle l s _ _) = l ++ [s]
 
 continue :: Token a => Part a -> Part a -> Bool
@@ -362,7 +374,7 @@ groupMiddle _ = error "groupMiddle: not a Middle part"
 
 groupLast :: [Part a] -> Part a
 groupLast [] = error "groupLast: empty list"
-groupLast [l@(Last _ _ _ _ _)] = l
+groupLast [l@(Last _ _ _ _ _ _)] = l
 groupLast _ = error "groupLast: not a Last part"
 
 ----------------------------------------------------------------------

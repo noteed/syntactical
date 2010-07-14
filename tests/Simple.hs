@@ -14,8 +14,8 @@ import qualified Holes
 -- Make it possible to shunt around some strings.
 instance Token String where
   toString = id
-  operator pt as = List $
-    (Atom . concat $ previous pt ++ [symbol pt]) : as
+  operator o as = List $
+    (Atom . concat $ symbols o) : as
 
 table0 :: Table String
 table0 = buildTable
