@@ -8,7 +8,7 @@ import Data.List (intersperse)
 import Text.Syntactical.Data (
   SExpr(..), Tree(..), Table, Op(..),
   partSymbol, previousPart,
-  Token, toString, operator, consider
+  Token, toString, operator
   )
 import Text.Syntactical.Yard (
   Shunt(..), initial, isDone, step, Failure(..), Rule(..)
@@ -18,11 +18,10 @@ instance Token String where
   toString = id
   operator pt as = List $
     (Atom . concat $ previousPart pt ++ [partSymbol pt]) : as
-  consider = (==)
 
 -- | Similar to the 'shunt' function but print the steps
 -- performed by the modified shunting yard algorithm.
-steps :: Table String -> [SExpr String] -> IO ()
+steps :: Token a => Table a -> [SExpr a] -> IO ()
 steps table ts = do
   putStrLn $ "               Input               Stack              Output   Rule"
   let sh = iterate (step table) $ initial ts

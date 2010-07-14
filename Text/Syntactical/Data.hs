@@ -30,6 +30,9 @@ class Token a where
   operator :: Part a -> [SExpr a] -> SExpr a
   consider :: a -> a -> Bool
 
+  -- default definition for consider tests the string representation
+  consider a b = toString a == toString b
+
 considers :: Token a => [a] -> [a] -> Bool
 considers a b = length a == length b && and (zipWith consider a b)
 
