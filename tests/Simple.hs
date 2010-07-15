@@ -10,6 +10,7 @@ import Text.Syntactical
 import Text.Syntactical.Data
 
 import qualified Holes
+import qualified Priority
 
 -- Make it possible to shunt around some strings.
 instance Token String where
@@ -319,7 +320,8 @@ testYard = testGroup "Text.Syntactical.Yard"
     map (helper' parse0) testsTable0'
   , testGroup "Holes" $
     map (helper $ shunt Holes.table . tokenize) Holes.tests
-
+  , testGroup "Priority (associativity and precedence)" $
+    map (helper $ shunt Priority.table . tokenize) Priority.tests
   ]
 
 -- Apply the parser p to i and check if it returns

@@ -13,10 +13,6 @@ module Text.Syntactical.Data (
   showPart, showSExpr, showTree
   ) where
 
--- TODO the Part given to 'operator' doesn't hold enough information to
--- reconstruct the whole Op. ('operator' should receive an Op instead of
--- a Part.)
-
 import Data.List
 
 ----------------------------------------------------------------------
