@@ -4,7 +4,7 @@ module Text.Syntactical.Data (
   infx, prefx, postfx, closed,
   infx_, prefx_, postfx_, closed_,
   sexpr, distfix,
-  buildTable,
+  buildTable, cut, setPrecedence,
   begin, end, leftOpen, rightOpen, rightHole, discard,
   applicator, applicator', continue, original, priority,
   arity, symbol, symbols, next, previous, current,
@@ -227,10 +227,11 @@ priority pt1 pt2 = case (associativity pt1, associativity pt2) of
   _ | isMiddle pt1 || end pt1 && not (isLone pt1) -> Lower
     | otherwise -> Higher
   where f a1 p1 a2 p2
-          | a1 == NonAssociative && a2 == NonAssociative = NoPriority
-          | a1 == LeftAssociative && p1 <= p2 = Lower
-          | a1 == RightAssociative && p1 < p2 = Lower
-          | a1 == NonAssociative && p1 <= p2 = Lower
+          | p1 == p2 && (a1 == NonAssociative
+            || a2 == NonAssociative || a1 /= a2) =
+            NoPriority
+          | p1 < p2 = Lower
+          | p1 == p2 && a1 == LeftAssociative = Lower
           | otherwise = Higher
 
 applicator :: Token a => Table a -> SExpr a -> Bool

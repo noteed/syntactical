@@ -58,6 +58,8 @@ testYard = testGroup "Text.Syntactical.Yard"
     map (helper parseHoles) Holes.tests
   , testGroup "Priority (associativity and precedence)" $
     map (helper parsePriority) Priority.tests
+  , testGroup "Priority (associativity and precedence) (bad input)" $
+    map (helper' parsePriority) Priority.tests'
   ]
 
 -- Apply the parser p to i and check if it returns
