@@ -1,5 +1,4 @@
-{-# Language TypeSynonymInstances #-}
-module Main where
+module Simple where
 
 import Test.Framework (defaultMain, testGroup, Test)
 import Test.Framework.Providers.HUnit
@@ -9,17 +8,8 @@ import System.Environment (getArgs)
 import Text.Syntactical
 import Text.Syntactical.Data
 
-import qualified Holes
-import qualified Priority
-
--- Make it possible to shunt around some strings.
-instance Token String where
-  toString = id
-  operator o as = List $
-    (Atom . concat $ symbols o) : as
-
-table0 :: Table String
-table0 = buildTable
+table :: Table String
+table = buildTable
  [ [ closed_ "(" Distfix ")"
    , closed_ "⟨" SExpression "⟩"
    , closed "</" Distfix"/>"
@@ -64,8 +54,8 @@ table0 = buildTable
  ]
 
 -- [(input, expected output)]
-testsTable0 :: [(String,String)]
-testsTable0 = [
+tests :: [(String,String)]
+tests = [
   ("1","1"),
   ("a","a"),
 
@@ -227,8 +217,8 @@ testsTable0 = [
   , ("1 a", "⟨1 a⟩")
   ]
 
-testsTable0' :: [(String, Failure String)]
-testsTable0' =
+tests' :: [(String, Failure String)]
+tests' =
   [ ("true then 1 else 0", MissingBefore [["if"]] "then")
   , ("if true 1 else 0", MissingBefore [["if","then"]] "else")
   , ("true 1 else 0", MissingBefore [["if","then"]] "else")
@@ -266,71 +256,4 @@ testsTable0' =
   , ("# a %", Error "precedence cannot be mixed")
 -}
   ]
-
-checkTable0 = checkTests table0 testsTable0
-
-parse0 = shunt table0 . tokenize
-
-parse1 = shunt Holes.table . tokenize
-
-steps0 = steps table0 . tokenize
-
-steps1 = steps Holes.table . tokenize
-
-checkTests table l = mapM_ (check table) l
-
-check table (i,o) =
-  let ts = tokenize i in case shunt table ts of
-  Right o' ->
-    if o == showSExpr o'
-    then return ()
-    else do putStrLn $ "FAIL: input: " ++ i
-              ++ ", expected: " ++ o
-              ++ ", computed: " ++ showSExpr o'
-            steps table ts
-  _ -> do putStrLn $ "FAIL: input: " ++ i
-            ++ ", expected: " ++ o
-            ++ ", computed: Nothing."
-          steps table ts
-
-tokenize = map (token) . separate
-
-separate = words . separate'
-separate' ('(':cs) = " ( " ++ separate' cs
-separate' (')':cs) = " ) " ++ separate' cs
-separate' ('⟨':cs) = " ⟨ " ++ separate' cs
-separate' ('⟩':cs) = " ⟩ " ++ separate' cs
-separate' (c:cs) = c : separate' cs
-separate' [] = []
-
-token = Atom
-
--- 
-
-main :: IO ()
-main = defaultMain
-  [ testYard
-  ]
-
-testYard :: Test
-testYard = testGroup "Text.Syntactical.Yard"
-  [ testGroup "Simple" $
-    map (helper parse0) testsTable0
-  , testGroup "Simple (bad input)" $
-    map (helper' parse0) testsTable0'
-  , testGroup "Holes" $
-    map (helper $ shunt Holes.table . tokenize) Holes.tests
-  , testGroup "Priority (associativity and precedence)" $
-    map (helper $ shunt Priority.table . tokenize) Priority.tests
-  ]
-
--- Apply the parser p to i and check if it returns
--- the expected value o.
-helper p (i,o) = testCase i $ case p i of
-  Right o' -> o @=? showSExpr o'
-  Left err -> assertFailure $ "cannot parse: " ++ show err
-
-helper' p (i,o) = testCase i $ case p i of
-  Right o' -> assertFailure $ "unexpected successful parse: " ++ showSExpr o'
-  Left o' -> o @=? o'
 
