@@ -125,9 +125,11 @@ buildTable ls = Table . concat $ zipWith f ls [n, n - 1 .. 0]
 -- | The Hole is used to give various behaviours when dealing
 -- with internal holes.
 -- SExpression means the 'content' of the hole should be
--- parsed as an s-expression.
+-- parsed as an s-expression. The resulting value is a List.
+-- This means the hole can be empty or contain one or more
+-- sub-expression.
 -- Distfix means the 'content' of the hole should be parsed
--- as a distfix expression.
+-- as a distfix expression. The hole cannot be left empty.
 data Hole = SExpression | Distfix
   deriving (Eq, Show)
 

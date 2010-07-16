@@ -48,9 +48,9 @@ tests =
   , ("</ a />", "⟨<//> a⟩")
   , ("</ </ a /> />", "⟨<//> ⟨<//> a⟩⟩")
 
-  , ("{ a }", "⟨{} ⟨a⟩⟩")         -- TODO Not ⟨{} a⟩; put this in the documentation.
-  , ("{ a b }", "⟨{} ⟨a b⟩⟩")     -- It seems unintuitive, but it is consistent as
-  , ("{ a b c }", "⟨{} ⟨a b c⟩⟩") -- it allows list of one, two, and more elements.
+  , ("{ a }", "⟨{} ⟨a⟩⟩")
+  , ("{ a b }", "⟨{} ⟨a b⟩⟩")
+  , ("{ a b c }", "⟨{} ⟨a b c⟩⟩")
   , ("{ 1 }", "⟨{} ⟨1⟩⟩")
   , ("{ 1 2 }", "⟨{} ⟨1 2⟩⟩")
   , ("{ 1 2 3 }", "⟨{} ⟨1 2 3⟩⟩")
