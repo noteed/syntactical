@@ -54,32 +54,31 @@ considers a b = length a == length b && and (zipWith consider a b)
 -- in the result or be discarded. The opening further specifies
 -- in the non-closed variant if the operator is prefix, infix, or postfix.
 data Op a =
-    Op1 Bool a [(Hole,a)] Opening Associativity Precedence
+    Op1 Bool a [(Hole,a)] Opening Precedence
   | Op2 Bool a [(Hole,a)] Hole a
   deriving (Eq, Show)
 
 setPrecedence :: Precedence -> Op a -> Op a
-setPrecedence p (Op1 keep x xs opening a _) = Op1 keep x xs opening a p
+setPrecedence p (Op1 keep x xs opening _) = Op1 keep x xs opening p
 setPrecedence _ c = c
 
 symbols :: Op a -> [a]
-symbols (Op1 _ a xs _ _ _) = a : map snd xs
+symbols (Op1 _ a xs _ _) = a : map snd xs
 symbols (Op2 _ a xs _ b) = a : map snd xs ++ [b]
 
 -- ^ Separate an operator in its different parts.
 cut :: Op a -> [Part a]
-cut o@(Op1 keep x [] opening _ p) =
+cut o@(Op1 keep x [] opening p) =
   [Lone o opening p x keep]
-cut o@(Op1 _ x xs opening a p) =
+cut o@(Op1 _ x xs opening p) =
   First ma x [snd $ head xs] (fst $ head xs) :
   map f (zip4 ls ss rs ks) ++
   [Last o mb (x:(map snd $ init xs)) (snd $ last xs) True ar]
   where
-    j = Just (a,p)
     (ma,mb,ar) = case opening of
-      LeftOpen _ -> (j, Nothing, length xs + 1)
-      BothOpen _ -> (j, j, length xs + 2)
-      RightOpen _ -> (Nothing, j, length xs + 1)
+      Postfix -> (Just (NonAssociative,p), Nothing, length xs + 1)
+      Infix a -> (Just (a,p), Just (a,p), length xs + 2)
+      Prefix -> (Nothing, Just (NonAssociative,p), length xs + 1)
     f (l, s, r, k) = Middle l s r k
     (_, xs') = holesAfter (init xs) (fst $ last xs)
     fxs = inits $ map fst xs'
@@ -210,9 +209,9 @@ data Part a = First (Maybe (Associativity,Precedence)) a [a] Hole
   deriving (Show, Eq)
 
 -- Specify if an Op1 or a Lone is prefix, postfix, or infix.
-data Opening = LeftOpen Bool
-             | RightOpen Bool
-             | BothOpen Associativity
+data Opening = Infix Associativity
+             | Prefix
+             | Postfix
   deriving (Show, Eq)
 
 original :: Part a -> Op a
@@ -284,7 +283,7 @@ symbol (Middle _ s _ _) = s
 arity :: Part a -> Int
 arity (First _ _ _ _) = error "arity: bad argument"
 arity (Middle _ _ _ _) = error "arity: bad argument"
-arity (Lone _ (BothOpen _) _ _ _) = 2
+arity (Lone _ (Infix _) _ _ _) = 2
 arity (Lone _ _ _ _ _) = 1
 arity (Last _ _ _ _ _ ar) = ar
 
@@ -292,7 +291,7 @@ leftOpen :: Part a -> Bool
 leftOpen (First (Just _) _ _ _) = True
 leftOpen (First _ _ _ _) = False
 leftOpen (Last _ _ _ _ _ _) = True
-leftOpen (Lone _ (RightOpen _) _ _ _) = False
+leftOpen (Lone _ Prefix _ _ _) = False
 leftOpen (Lone _ _ _ _ _) = True
 leftOpen (Middle _ _ _ _) = True
 
@@ -300,7 +299,7 @@ rightOpen :: Part a -> Bool
 rightOpen (First _ _ _ _) = True
 rightOpen (Last _ (Just _) _ _ _ _) = True
 rightOpen (Last _ _ _ _ _ _) = False
-rightOpen (Lone _ (LeftOpen _) _ _ _) = False
+rightOpen (Lone _ Postfix _ _ _) = False
 rightOpen (Lone _ _ _ _ _) = True
 rightOpen (Middle _ _ _ _) = True
 
@@ -313,11 +312,9 @@ rightHole (Middle _ _ _ k) = Just k
 associativity :: Part a -> Maybe (Associativity,Precedence)
 associativity (First ap _ _ _) = ap
 associativity (Last _ ap _ _ _ _) = ap
-associativity (Lone _ (LeftOpen a) p _ _) = Just (a',p)
-  where a' = if a then LeftAssociative else NonAssociative
-associativity (Lone _ (RightOpen a) p _ _) = Just (a',p)
-  where a' = if a then RightAssociative else NonAssociative
-associativity (Lone _ (BothOpen a) p _ _) = Just (a,p)
+associativity (Lone _ Postfix p _ _) = Just (NonAssociative,p)
+associativity (Lone _ Prefix p _ _) = Just (NonAssociative,p)
+associativity (Lone _ (Infix a) p _ _) = Just (a,p)
 associativity (Middle _ _ _ _) = Nothing
 
 next :: Part a -> [a]
@@ -379,23 +376,22 @@ groupLast _ = error "groupLast: not a Last part"
 ----------------------------------------------------------------------
 
 infx :: Associativity -> a -> Op a
--- TODO the associativity is present twice
-infx a f = Op1 True f [] (BothOpen a) a 0
+infx a f = Op1 True f [] (Infix a) 0
 
 infx_ :: Associativity -> a -> Op a
-infx_ a f = Op1 False f [] (BothOpen a) a 0
+infx_ a f = Op1 False f [] (Infix a) 0
 
 prefx :: a -> Op a
-prefx f = Op1 True f [] (RightOpen True) RightAssociative 0
+prefx f = Op1 True f [] Prefix 0
 
 prefx_ :: a -> Op a
-prefx_ f = Op1 False f [] (RightOpen True) RightAssociative 0
+prefx_ f = Op1 False f [] Prefix 0
 
 postfx :: a -> Op a
-postfx f = Op1 True f [] (LeftOpen True) RightAssociative 0
+postfx f = Op1 True f [] Postfix 0
 
 postfx_ :: a -> Op a
-postfx_ f = Op1 False f [] (LeftOpen True) RightAssociative 0
+postfx_ f = Op1 False f [] Postfix 0
 
 closed :: a -> Hole -> a -> Op a
 closed f k l = Op2 True f [] k l
@@ -404,12 +400,16 @@ closed_ :: a -> Hole -> a -> Op a
 closed_ f k l = Op2 False f [] k l
 
 sexpr :: Op a -> a -> Op a
-sexpr (Op1 keep x rest opening a p) y = Op1 keep x (rest++[(SExpression,y)]) opening a p
-sexpr (Op2 keep x rest k y) z = Op2 keep x (rest++[(k,y)]) SExpression z
+sexpr (Op1 keep x rest opening p) y =
+  Op1 keep x (rest++[(SExpression,y)]) opening p
+sexpr (Op2 keep x rest k y) z =
+  Op2 keep x (rest++[(k,y)]) SExpression z
 
 distfix :: Op a -> a -> Op a
-distfix (Op1 keep x rest opening a p) y = Op1 keep x (rest++[(Distfix,y)]) opening a p
-distfix (Op2 keep x rest k y) z = Op2 keep x (rest++[(k,y)]) Distfix z
+distfix (Op1 keep x rest opening p) y =
+  Op1 keep x (rest++[(Distfix,y)]) opening p
+distfix (Op2 keep x rest k y) z =
+  Op2 keep x (rest++[(k,y)]) Distfix z
 
 ----------------------------------------------------------------------
 -- A few 'show' functions for SExpr, and Tree

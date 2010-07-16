@@ -38,7 +38,7 @@ table = buildTable
    ]
  , [ infx RightAssociative ","
    ]
- , [ Op1 True "\\" [(SExpression,"->")] (RightOpen True) RightAssociative 0
+ , [ Op1 True "\\" [(SExpression,"->")] Prefix 0
    ]
  , [ prefx "let" `distfix` "in"
    , infx RightAssociative "where"
