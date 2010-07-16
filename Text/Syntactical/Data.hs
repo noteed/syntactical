@@ -8,7 +8,7 @@ module Text.Syntactical.Data (
   begin, end, leftOpen, rightOpen, rightHole, discard,
   applicator, applicator', continue, original, priority,
   arity, symbol, symbols, next, previous, current,
-  findBoth, findBegin, FindBegin(..),
+  findBoth, findBegin, FindBegin(..), FindBoth(..),
   Token, toString, operator, consider,
   showPart, showSExpr, showTree
   ) where
@@ -145,15 +145,31 @@ newtype Table a = Table [Part a]
 -- NoBegin: no parts with the requested symbol.
 -- Begin: found a begin part.
 -- MissingBegin: no begin part found but continuing part found.
-data FindBegin a = NoBegin | Begin (Part a) | MissingBegin [[a]]
+data FindBegin a = NoBegin | Begin (Part a) | MissingBegin [[a]] | AmbiguousBegin
+
+data FindContinue a = NoContinue | Continue (Part a) | AmbiguousContinue
+
+data FindBoth a = BNothing
+                | BContinue (Part a)
+                | BBegin (Part a)
+                | BMissingBegin [[a]]
+                | BAmbiguous
 
 findParts :: Token a => Table a -> a -> [Part a]
 findParts (Table ps) x = filter ((consider x) . symbol) ps
 
-findContinuing :: Token a => [Part a] -> Part a -> Maybe (Part a)
+findContinuing :: Token a => [Part a] -> Part a -> FindContinue a
 findContinuing xs y = case as of
-  [] -> Nothing
-  (a:_) -> Just $ if isLast a then groupLast as else groupMiddle as
+  [] -> NoContinue
+  (a:as') -> if isLast a
+    then if all isLast as'
+      then Continue $ groupLast as
+      else AmbiguousContinue
+    else if all isMiddle as'
+      then case groupMiddle as of
+        Just pt -> Continue pt
+        Nothing -> AmbiguousContinue -- TODO for a different reason
+      else AmbiguousContinue
   where as = filter (`continue` y) xs
 
 -- Search the operator stack for the top-most parts waiting to be completed
@@ -178,22 +194,29 @@ findIncompletePart table (_:ss) = findIncompletePart table ss
 -- find, even if it is not First; one of the rules will
 -- generate a MissingBefore (in the [] case) or an Incomplete
 -- (in the pts2 case).
-findBoth :: Token a => Table a -> a -> [Tree a] -> Either (Part a) (FindBegin a)
+findBoth :: Token a => Table a -> a -> [Tree a] -> FindBoth a
 findBoth table x st = case findIncompletePart table st of
-  Nothing -> Right $ findBegin table x
+  Nothing -> wrap $ findBegin table x
   Just y -> case findContinuing xs y of
-    Just a -> Left a
-    Nothing -> Right $ findBegin table x
+    Continue a -> BContinue a
+    NoContinue -> wrap $ findBegin table x
+    AmbiguousContinue -> BAmbiguous
   where xs = findParts table x
+        wrap a = case a of
+          NoBegin -> BNothing
+          MissingBegin b -> BMissingBegin b
+          Begin b -> BBegin b
+          AmbiguousBegin -> BAmbiguous
 
 findBegin :: Token a => Table a -> a -> FindBegin a
 findBegin table x = case filterParts $ findParts table x of
   ([],[],[],[]) -> NoBegin
-  ((_:_),(_:_),_,_) -> error "findBegin: ambiguous: lone or first part"
-  -- TODO the ambiguity is present when they share the same prefix
-  --(_,_,(_:_),(_:_)) -> error "findBegin: ambiguous: middle or last part"
-  (l@(_:_),_,_,_) -> Begin $ groupLone l
-  (_,f@(_:_),_,_) -> Begin $ groupFirst f
+  ((_:_),(_:_),_,_) -> AmbiguousBegin
+  (([pt]),_,_,_) -> Begin pt
+  ((_:_),_,_,_) -> AmbiguousBegin -- TODO not the same reason
+  (_,f@(_:_),_,_) -> case groupFirst f of
+    Nothing -> AmbiguousBegin -- TODO not the same reason
+    Just pt -> Begin pt
   (_,_,m,l) -> MissingBegin $ map previous (m++l)
 
 -- TODO the complete Op inside then Last and Lone Part makes the other fields
@@ -344,28 +367,23 @@ filterParts :: [Part a] -> ([Part a],[Part a],[Part a],[Part a])
 filterParts pts = (filter isLone pts, filter isFirst pts,
   filter isMiddle pts, filter isLast pts)
 
-groupLone :: [Part a] -> Part a
-groupLone [pt] = pt
-groupLone [] = error "groupLone: empty list"
-groupLone _ = error "groupLone: ambiguous lone part, only one allowed"
-
-groupFirst :: Token a => [Part a] -> Part a
+groupFirst :: Token a => [Part a] -> Maybe (Part a)
 groupFirst [] = error "groupFirst: empty list"
 groupFirst (First a' x s' k':pts) = go a' s' k' pts
-  where go a s k [] = First a x s k
+  where go a s k [] = Just $ First a x s k
         go a s k (First a2 _ s2 k2:xs)
           | a == a2 && k == k2 = go a (unionBy consider s s2) k xs
-        go _ _ _ _ = error "groupFirst: ambiguous first parts"
+        go _ _ _ _ = Nothing -- ambiguous first parts
 groupFirst _ = error "groupFirst: not a First part"
 
-groupMiddle :: Token a => [Part a] -> Part a
+groupMiddle :: Token a => [Part a] -> Maybe (Part a)
 groupMiddle [] = error "groupMiddle: empty list"
 groupMiddle (Middle ss' x s' k':pts) = go ss' s' k' pts
-  where go ss s k [] = Middle ss x s k
+  where go ss s k [] = Just $ Middle ss x s k
         go ss s k (Middle ss2 _ s2 k2:xs)
           | not (considers ss ss2) = error "groupMiddle: different prefix"
           | k == k2 = go ss (unionBy consider s s2) k xs
-        go _ _ _ _ = error "groupMiddle: ambiguous middle parts"
+        go _ _ _ _ = Nothing -- ambiguous middle parts
 groupMiddle _ = error "groupMiddle: not a Middle part"
 
 groupLast :: [Part a] -> Part a

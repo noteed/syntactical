@@ -13,6 +13,7 @@ import Text.Syntactical.Data
 import qualified Simple
 import qualified Holes
 import qualified Priority
+import qualified Ambiguous
 
 -- Make it possible to shunt around some strings.
 instance Token String where
@@ -43,9 +44,15 @@ parseHoles = shunt Holes.table . tokenize
 
 parsePriority = shunt Priority.table . tokenize
 
+parseAmbiguous = shunt Ambiguous.table . tokenize
+
 stepsSimple = steps Simple.table . tokenize
 
 stepsHoles = steps Holes.table . tokenize
+
+stepsPriority = steps Priority.table . tokenize
+
+stepsAmbiguous = steps Ambiguous.table . tokenize
 
 -- 
 
@@ -66,6 +73,8 @@ testYard = testGroup "Text.Syntactical.Yard"
     map (helper parsePriority) Priority.tests
   , testGroup "Priority (associativity and precedence) (bad input)" $
     map (helper' parsePriority) Priority.tests'
+  , testGroup "Ambiguous" $
+    map (helper' parseAmbiguous) Ambiguous.tests
   ]
 
 -- Apply the parser p to i and check if it returns

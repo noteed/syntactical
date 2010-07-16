@@ -79,6 +79,8 @@ Future and/or wishes
   invalid inputs. Probably a good approach would be to use s-expression
   grammars.
 - Turn the library into a command-line tool to generate parsers.
+- Check the operator table for ambiguity separately of running the shunting-
+  yard.
 
 Before pushing to Hackage
 -------------------------
