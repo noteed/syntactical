@@ -45,23 +45,23 @@ b6' = head $ cut b6
 -- [(input, expected output)]
 tests :: [(String,String)]
 tests =
-  [ ("1 + 2 - 3", "⟨- ⟨+ 1 2⟩ 3⟩")
-  , ("1 - 2 + 3", "⟨+ ⟨- 1 2⟩ 3⟩")
-  , ("1 + 2 - 3 + 4", "⟨+ ⟨- ⟨+ 1 2⟩ 3⟩ 4⟩")
+  [ ("1 + 2 - 3", "⟨␣-␣ ⟨␣+␣ 1 2⟩ 3⟩")
+  , ("1 - 2 + 3", "⟨␣+␣ ⟨␣-␣ 1 2⟩ 3⟩")
+  , ("1 + 2 - 3 + 4", "⟨␣+␣ ⟨␣-␣ ⟨␣+␣ 1 2⟩ 3⟩ 4⟩")
 
-  , ("X al7 Y bl6 Z", "⟨bl6 ⟨al7 X Y⟩ Z⟩")
-  , ("X ar7 Y br6 Z", "⟨br6 ⟨ar7 X Y⟩ Z⟩")
-  , ("X al5 Y bl6 Z", "⟨al5 X ⟨bl6 Y Z⟩⟩")
-  , ("X al5 Y br6 Z", "⟨al5 X ⟨br6 Y Z⟩⟩")
-  , ("X a5  Y b6  Z", "⟨a5 X ⟨b6 Y Z⟩⟩")
-  , ("X a5  Y br6 Z", "⟨a5 X ⟨br6 Y Z⟩⟩")
-  , ("X al5 Y b6  Z", "⟨al5 X ⟨b6 Y Z⟩⟩")
+  , ("X al7 Y bl6 Z", "⟨␣bl6␣ ⟨␣al7␣ X Y⟩ Z⟩")
+  , ("X ar7 Y br6 Z", "⟨␣br6␣ ⟨␣ar7␣ X Y⟩ Z⟩")
+  , ("X al5 Y bl6 Z", "⟨␣al5␣ X ⟨␣bl6␣ Y Z⟩⟩")
+  , ("X al5 Y br6 Z", "⟨␣al5␣ X ⟨␣br6␣ Y Z⟩⟩")
+  , ("X a5  Y b6  Z", "⟨␣a5␣ X ⟨␣b6␣ Y Z⟩⟩")
+  , ("X a5  Y br6 Z", "⟨␣a5␣ X ⟨␣br6␣ Y Z⟩⟩")
+  , ("X al5 Y b6  Z", "⟨␣al5␣ X ⟨␣b6␣ Y Z⟩⟩")
 
-  , ("X al6 Y bl6 Z", "⟨bl6 ⟨al6 X Y⟩ Z⟩")
+  , ("X al6 Y bl6 Z", "⟨␣bl6␣ ⟨␣al6␣ X Y⟩ Z⟩")
 
-  , ("X ar6 Y br6 Z", "⟨ar6 X ⟨br6 Y Z⟩⟩")
+  , ("X ar6 Y br6 Z", "⟨␣ar6␣ X ⟨␣br6␣ Y Z⟩⟩")
 
-  , ("X al6 Y al5 Z al7 X", "⟨al5 ⟨al6 X Y⟩ ⟨al7 Z X⟩⟩")
+  , ("X al6 Y al5 Z al7 X", "⟨␣al5␣ ⟨␣al6␣ X Y⟩ ⟨␣al7␣ Z X⟩⟩")
   ]
 
 tests' :: [(String,Failure String)]

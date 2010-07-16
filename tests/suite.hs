@@ -5,6 +5,7 @@ import Test.Framework (defaultMain, testGroup, Test)
 import Test.Framework.Providers.HUnit
 import Test.HUnit hiding (Test)
 import System.Environment (getArgs)
+import Data.List (intersperse)
 
 import Text.Syntactical
 import Text.Syntactical.Data
@@ -16,8 +17,13 @@ import qualified Priority
 -- Make it possible to shunt around some strings.
 instance Token String where
   toString = id
-  operator o as = List $
-    (Atom . concat $ symbols o) : as
+  operator o as = List $ Atom a : as
+    where a = case o of
+            Op1 _ _ _ (Infix _) _ -> '␣' : a' ++ "␣"
+            Op1 _ _ _ Prefix _ -> a' ++ "␣"
+            Op1 _ _ _ Postfix _ -> '␣' : a'
+            Op2 _ _ _ _ _ -> a'
+          a' = concat . intersperse "␣" $ symbols o
 
 tokenize = map (token) . separate
 
