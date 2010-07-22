@@ -26,7 +26,7 @@ import Text.Syntactical.Data (
   begin, end, leftOpen, rightOpen, rightHole, discard,
   applicator, applicator', continue, original, priority,
   arity, symbol, next, current,
-  findBoth, findBegin, FindBegin(..), FindBoth(..),
+  findBoth, findBegin, FindBegin(..), FindBoth(..), Ambiguity(..),
   Token, toString, operator,
   showPart, showSExpr, showTree
   )
@@ -78,7 +78,7 @@ data Failure a =
   | MissingSubBetween a a -- ^ missing sub-expression between parts
   | MissingSubBefore a    -- ^ missing sub-expression before string
   | MissingSubAfter a     -- ^ missing sub-expression after string
-  | Ambiguity             -- ^ the part can be the last or not
+  | Ambiguity Ambiguity   -- ^ the part can be the last or not
   | Unexpected            -- ^ this is a bug if it happens
   deriving (Eq, Show)
 
@@ -161,7 +161,7 @@ step table sh@(S tt@(t@(Atom x):ts) st@(s@(Part y):ss) oo@(os:oss) ru) =
     BBegin pt1 -> go pt1
     BMissingBegin ps -> rule sh (failure $ ps `MissingBefore` x)
     BNothing -> error "can't happen" -- x is in the table for sure
-    BAmbiguous -> rule sh (failure Ambiguity)
+    BAmbiguous amb -> rule sh (failure $ Ambiguity amb)
   where
     go pt1
       | rightHole y == Just SExpression && pt1 `continue` y && stackedOp ru =
@@ -214,7 +214,7 @@ step table sh@(S (t:ts) [] oo ru) = case t of
     -- x is the first sub-op, and the stack is empty
     Begin pt1 -> go pt1
     MissingBegin xs -> rule sh (failure $ xs `MissingBefore` x)
-    AmbiguousBegin -> rule sh (failure Ambiguity)
+    AmbiguousBegin amb -> rule sh (failure $ Ambiguity amb)
   where
     go pt1
       | leftOpen pt1 && isInitial ru =
@@ -301,7 +301,7 @@ showFailure f = case f of
     "Parse error: no sub-expression before " ++ toString a
   MissingSubAfter a ->
     "Parse error: no sub-expression after " ++ toString a
-  Ambiguity ->
+  Ambiguity _ ->
     "Parse error: the symbol is an ambiguous part"
   Unexpected ->
     "Parsing raised a bug"

@@ -22,15 +22,15 @@ table = buildTable
 
 tests :: [(String,Failure String)]
 tests =
-  [ ("< 1 |", Ambiguity)
-  , ("< 1 | 2", Ambiguity)
-  , ("1 ? 2", Ambiguity)
-  , ("! 1", Ambiguity)
-  , ("<- 1 -- 2", Ambiguity)
-  , ("1 <- 2 --", Ambiguity)
-  , (">- 1 -- 2", Ambiguity)
-  , (">- 1 ++ 2", Ambiguity)
-  , (">> 1 // 2 .. 3", Ambiguity)
-  , (">> 1 // 2 ;; 3", Ambiguity)
+  [ ("< 1 |", Ambiguity MiddleOrLast)
+  , ("< 1 | 2", Ambiguity MiddleOrLast)
+  , ("1 ? 2", Ambiguity LoneOrFirst)
+  , ("! 1", Ambiguity MultipleLone)
+  , ("<- 1 -- 2", Ambiguity NotSameFirst)
+  , ("1 <- 2 --", Ambiguity NotSameFirst)
+  , (">- 1 -- 2", Ambiguity NotSameHole)
+  , (">- 1 ++ 2", Ambiguity NotSameHole)
+  , (">> 1 // 2 .. 3", Ambiguity NotSameHole)
+  , (">> 1 // 2 ;; 3", Ambiguity NotSameHole)
   ]
 

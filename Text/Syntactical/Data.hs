@@ -8,7 +8,7 @@ module Text.Syntactical.Data (
   begin, end, leftOpen, rightOpen, rightHole, discard,
   applicator, applicator', continue, original, priority,
   arity, symbol, symbols, next, previous, current,
-  findBoth, findBegin, FindBegin(..), FindBoth(..),
+  findBoth, findBegin, FindBegin(..), FindBoth(..), Ambiguity(..),
   Token, toString, operator, consider,
   showPart, showSExpr, showTree
   ) where
@@ -145,15 +145,27 @@ newtype Table a = Table [Part a]
 -- NoBegin: no parts with the requested symbol.
 -- Begin: found a begin part.
 -- MissingBegin: no begin part found but continuing part found.
-data FindBegin a = NoBegin | Begin (Part a) | MissingBegin [[a]] | AmbiguousBegin
+data FindBegin a = NoBegin
+                 | Begin (Part a)
+                 | MissingBegin [[a]]
+                 | AmbiguousBegin Ambiguity
 
-data FindContinue a = NoContinue | Continue (Part a) | AmbiguousContinue
+data FindContinue a = NoContinue
+                    | Continue (Part a)
+                    | AmbiguousContinue Ambiguity
+
+data Ambiguity = MiddleOrLast
+               | NotSameHole
+               | NotSameFirst
+               | LoneOrFirst
+               | MultipleLone
+  deriving (Eq, Show)
 
 data FindBoth a = BNothing
                 | BContinue (Part a)
                 | BBegin (Part a)
                 | BMissingBegin [[a]]
-                | BAmbiguous
+                | BAmbiguous Ambiguity
 
 findParts :: Token a => Table a -> a -> [Part a]
 findParts (Table ps) x = filter ((consider x) . symbol) ps
@@ -164,12 +176,12 @@ findContinuing xs y = case as of
   (a:as') -> if isLast a
     then if all isLast as'
       then Continue $ groupLast as
-      else AmbiguousContinue
+      else AmbiguousContinue MiddleOrLast
     else if all isMiddle as'
       then case groupMiddle as of
         Just pt -> Continue pt
-        Nothing -> AmbiguousContinue -- TODO for a different reason
-      else AmbiguousContinue
+        Nothing -> AmbiguousContinue NotSameHole
+      else AmbiguousContinue MiddleOrLast
   where as = filter (`continue` y) xs
 
 -- Search the operator stack for the top-most parts waiting to be completed
@@ -200,23 +212,23 @@ findBoth table x st = case findIncompletePart table st of
   Just y -> case findContinuing xs y of
     Continue a -> BContinue a
     NoContinue -> wrap $ findBegin table x
-    AmbiguousContinue -> BAmbiguous
+    AmbiguousContinue amb -> BAmbiguous amb
   where xs = findParts table x
         wrap a = case a of
           NoBegin -> BNothing
           MissingBegin b -> BMissingBegin b
           Begin b -> BBegin b
-          AmbiguousBegin -> BAmbiguous
+          AmbiguousBegin amb -> BAmbiguous amb
 
 findBegin :: Token a => Table a -> a -> FindBegin a
 findBegin table x = case filterParts $ findParts table x of
   ([],[],[],[]) -> NoBegin
-  ((_:_),(_:_),_,_) -> AmbiguousBegin
+  ((_:_),(_:_),_,_) -> AmbiguousBegin LoneOrFirst
   (([pt]),_,_,_) -> Begin pt
-  ((_:_),_,_,_) -> AmbiguousBegin -- TODO not the same reason
+  ((_:_),_,_,_) -> AmbiguousBegin MultipleLone
   (_,f@(_:_),_,_) -> case groupFirst f of
-    Nothing -> AmbiguousBegin -- TODO not the same reason
-    Just pt -> Begin pt
+    Left amb -> AmbiguousBegin amb
+    Right pt -> Begin pt
   (_,_,m,l) -> MissingBegin $ map previous (m++l)
 
 -- TODO the complete Op inside then Last and Lone Part makes the other fields
@@ -367,13 +379,15 @@ filterParts :: [Part a] -> ([Part a],[Part a],[Part a],[Part a])
 filterParts pts = (filter isLone pts, filter isFirst pts,
   filter isMiddle pts, filter isLast pts)
 
-groupFirst :: Token a => [Part a] -> Maybe (Part a)
+groupFirst :: Token a => [Part a] -> Either Ambiguity (Part a)
 groupFirst [] = error "groupFirst: empty list"
 groupFirst (First a' x s' k':pts) = go a' s' k' pts
-  where go a s k [] = Just $ First a x s k
+  where go a s k [] = Right $ First a x s k
         go a s k (First a2 _ s2 k2:xs)
           | a == a2 && k == k2 = go a (unionBy consider s s2) k xs
-        go _ _ _ _ = Nothing -- ambiguous first parts
+          | a /= a2 = Left NotSameFirst
+          | k /= k2 = Left NotSameHole
+        go _ _ _ _ = error "groupFirst: not a First part"
 groupFirst _ = error "groupFirst: not a First part"
 
 groupMiddle :: Token a => [Part a] -> Maybe (Part a)

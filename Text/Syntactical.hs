@@ -12,7 +12,7 @@ import Text.Syntactical.Data (
   sexpr, distfix,
   buildTable,
   arity, symbol, symbols, next, previous, current,
-  Associativity(..), Hole(..), Table, SExpr(..),
+  Associativity(..), Hole(..), Table, SExpr(..), Ambiguity(..),
   Token, toString, operator, consider,
   showSExpr
   )
