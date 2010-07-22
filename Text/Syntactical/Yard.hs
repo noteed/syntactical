@@ -3,8 +3,6 @@
 -- application by juxtaposition (without any paren around the arguments)
 -- and distfix operators.
 
--- TODO use hlint.
-
 -- Note: The parser allows applying a number to another,
 -- e.g. 1 2. Maybe this could be turned into an option.
 -- The proper way to forbid such 'number application' is
@@ -101,7 +99,7 @@ isDone _ = False
 
 -- Set the rule of a Shunt structure.
 rule :: Shunt a -> Rule a -> Shunt a
-rule (S tt st oo _) ru = S tt st oo ru
+rule (S tt st oo _) = S tt st oo
 
 -- Construct the initial state of the shunting-yard from a given input list.
 initial :: [SExpr a] -> Shunt a
@@ -124,7 +122,7 @@ shunt table ts = case fix $ initial ts of
 step :: Token a => Table a -> Shunt a -> Shunt a
 
 -- There is a complete Closed or Postifx operator on the top of the stack.
-step _ (S tt (s@(Part y):ss) oo@(os:oss) _) | end y && (not $ rightOpen y)
+step _ (S tt (s@(Part y):ss) oo@(os:oss) _) | end y && not (rightOpen y)
   = if discard y
   then let (o:os') = os in S (o:tt) ss (os':oss) MatchedR
   else let ((o:os'):oss') = apply s oo in S (o:tt) ss (os':oss') MatchedR
@@ -142,7 +140,7 @@ step table (S (t:ts) st@(s:_) oo@(os:oss) _)
 
 -- An operator part is on the input stack and an applicator is on
 -- the stack.
-step table (S tt@((Atom x):ts) st@(s:ss) oo _)
+step table (S tt@(Atom x:ts) st@(s:ss) oo _)
   | applicator' table s =
   case findBoth table x st of
     BBegin pt1
@@ -167,7 +165,7 @@ step table sh@(S tt@(t@(Atom x):ts) st@(s@(Part y):ss) oo@(os:oss) ru) =
       let ([]:h:oss') = oo
       in S ts (Part pt1:ss) ((List []:h):oss') ContinueOp
       | rightHole y == Just SExpression && pt1 `continue` y =
-      let (os':h:oss') = oo
+      let os':h:oss' = oo
           ap = List (reverse os')
       in S ts (Part pt1:ss) ((ap:h):oss') ContinueOp
       | rightHole pt1 == Just Distfix && rightHole y == Just SExpression =
@@ -236,7 +234,7 @@ step _ sh = rule sh (failure Unexpected)
 apply :: Token a => Tree a -> [[SExpr a]] -> [[SExpr a]]
 apply (Part y) (os:oss) | end y =
   if length l /= nargs
-  then error $ "can't happen" -- holes are always filled by one expression
+  then error "can't happen" -- holes are always filled by one expression
   else (operator (original y) (reverse l) : r) : oss
   where nargs = arity y
         (l,r) = splitAt nargs os
@@ -254,7 +252,7 @@ apply _ _ = error "can't happen"
 -- performed by the modified shunting yard algorithm.
 steps :: Token a => Table a -> [SExpr a] -> IO ()
 steps table ts = do
-  putStrLn $ "               Input               Stack              Output   Rule"
+  putStrLn "               Input               Stack              Output   Rule"
   let sh = iterate (step table) $ initial ts
       l = length $ takeWhile (not . isDone) sh
   mapM_ (putStrLn . showShunt) (take (l + 1) sh)
@@ -284,12 +282,12 @@ showFailure :: Token a => Failure a -> String
 showFailure f = case f of
   MissingBefore ps p ->
     "Parse error: missing operator parts " ++
-    concatMap (\pt -> concat (intersperse " " $ map toString pt)) ps ++
+    concatMap (unwords . map toString) ps ++
     " before " ++ toString p
   MissingAfter p ps ->
     "Parse error: missing operator part " ++
     concat (intersperse ", " $ map toString p) ++ " after " ++
-    concat (intersperse " " $ map toString ps)
+    unwords (map toString ps)
   CantMix a b ->
      "Parse error: cannot mix operators " ++ showPart a ++
      " and " ++ showPart b

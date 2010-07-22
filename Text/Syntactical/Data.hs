@@ -167,7 +167,7 @@ data FindBoth a = BNothing
                 | BAmbiguous Ambiguity
 
 findParts :: Token a => Table a -> a -> [Part a]
-findParts (Table ps) x = filter ((consider x) . symbol) ps
+findParts (Table ps) x = filter (consider x . symbol) ps
 
 findContinuing :: Token a => [Part a] -> Part a -> FindContinue a
 findContinuing xs y = case as of
@@ -222,9 +222,9 @@ findBoth table x st = case findIncompletePart st of
 findBegin :: Token a => Table a -> a -> FindBegin a
 findBegin table x = case filterParts $ findParts table x of
   ([],[],[],[]) -> NoBegin
-  ((_:_),(_:_),_,_) -> AmbiguousBegin LoneOrFirst
-  (([pt]),_,_,_) -> Begin pt
-  ((_:_),_,_,_) -> AmbiguousBegin MultipleLone
+  (_:_,_:_,_,_) -> AmbiguousBegin LoneOrFirst
+  ([pt],_,_,_) -> Begin pt
+  (_:_,_,_,_) -> AmbiguousBegin MultipleLone
   (_,f@(_:_),_,_) -> case groupFirst f of
     Left amb -> AmbiguousBegin amb
     Right pt -> Begin pt
@@ -445,10 +445,10 @@ postfx_ :: a -> Op a
 postfx_ f = Op1 False f [] Postfix 0
 
 closed :: a -> Hole -> a -> Op a
-closed f k l = Op2 True f [] k l
+closed f = Op2 True f []
 
 closed_ :: a -> Hole -> a -> Op a
-closed_ f k l = Op2 False f [] k l
+closed_ f = Op2 False f []
 
 sexpr :: Op a -> a -> Op a
 sexpr (Op1 keep x rest opening p) y =

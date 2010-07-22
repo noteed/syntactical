@@ -37,6 +37,6 @@ table =
    ]
   ]
 
-binary name fun assoc =
-  Infix (try $ do{ spaces >> string name; return fun }) assoc
+binary name fun =
+  Infix (try $ do{ spaces >> string name; return fun })
 

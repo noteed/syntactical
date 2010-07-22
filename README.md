@@ -92,7 +92,6 @@ Future and/or wishes
 Before pushing to Hackage
 -------------------------
 
-- Eliminate all the TODOs
 - Write the doc
 - Make sure it installs cleanly with cabal
 

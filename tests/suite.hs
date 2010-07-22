@@ -26,7 +26,7 @@ instance Token String where
             Op2 _ _ _ _ _ -> a'
           a' = concat . intersperse "␣" $ symbols o
 
-tokenize = map (token) . separate
+tokenize = map token . separate
 
 separate = words . separate'
 separate' ('(':cs) = " ( " ++ separate' cs
