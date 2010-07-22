@@ -3,7 +3,6 @@
 -- application by juxtaposition (without any paren around the arguments)
 -- and distfix operators.
 
--- TODO use HPC to see if tests cover the code.
 -- TODO use hlint.
 
 -- Note: The parser allows applying a number to another,

@@ -54,6 +54,13 @@ The library works but is still a bit rough. Tests don't cover enough cases and
 it is simple to overlook one. Documentation is missing (but a look at
 tests/Simple is enough to start).
 
+The HPC shows that a few things are not tested:
+- a few unevaluated Hole values in Simple.hs shows that some operator
+  combinations are not tested)
+- A AmbiguousContinue MiddleOrLast in findContinuing is never returned
+- Surprisingly, it seems the fst element in Maybe (Associativity,Precedence)
+- is not used.
+
 Future and/or wishes
 --------------------
 

@@ -185,10 +185,10 @@ findContinuing xs y = case as of
 
 -- Search the operator stack for the top-most parts waiting to be completed
 -- (i.e. on the left of an innner hole).
-findIncompletePart :: Table a -> [Tree a] -> Maybe (Part a)
-findIncompletePart _ [] = Nothing
-findIncompletePart _ (Part y:_) | not (end y) = Just y
-findIncompletePart table (_:ss) = findIncompletePart table ss
+findIncompletePart :: [Tree a] -> Maybe (Part a)
+findIncompletePart [] = Nothing
+findIncompletePart (Part y:_) | not (end y) = Just y
+findIncompletePart (_:ss) = findIncompletePart ss
 
 -- - The operator doesn't contain any operator
 -- -> returns (First,Nothing)
@@ -206,7 +206,7 @@ findIncompletePart table (_:ss) = findIncompletePart table ss
 -- generate a MissingBefore (in the [] case) or an Incomplete
 -- (in the pts2 case).
 findBoth :: Token a => Table a -> a -> [Tree a] -> FindBoth a
-findBoth table x st = case findIncompletePart table st of
+findBoth table x st = case findIncompletePart st of
   Nothing -> wrap $ findBegin table x
   Just y -> case findContinuing xs y of
     Continue a -> BContinue a
