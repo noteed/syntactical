@@ -3,9 +3,7 @@
 -- application by juxtaposition (without any paren around the arguments)
 -- and distfix operators.
 
--- TODO is ! a + b allowed if ! and + have the same precedence?
 -- TODO use HPC to see if tests cover the code.
--- TODO maybe feed random tokens to the algorithm to see if it can crash.
 -- TODO use hlint.
 
 -- Note: The parser allows applying a number to another,
