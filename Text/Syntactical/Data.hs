@@ -68,17 +68,17 @@ symbols (Op2 _ a xs _ b) = a : map snd xs ++ [b]
 
 -- ^ Separate an operator in its different parts.
 cut :: Op a -> [Part a]
-cut o@(Op1 keep x [] opening p) =
-  [Lone o opening p x keep]
+cut (Op1 keep x [] opening p) =
+  [Lone keep x opening p]
 cut o@(Op1 _ x xs opening p) =
   First ma x [snd $ head xs] (fst $ head xs) :
   map f (zip4 ls ss rs ks) ++
-  [Last o mb (x:(map snd $ init xs)) (snd $ last xs) True ar]
+  [Last o]
   where
-    (ma,mb,ar) = case opening of
-      Postfix -> (Just (NonAssociative,p), Nothing, length xs + 1)
-      Infix a -> (Just (a,p), Just (a,p), length xs + 2)
-      Prefix -> (Nothing, Just (NonAssociative,p), length xs + 1)
+    ma = case opening of
+      Postfix -> Just (NonAssociative,p)
+      Infix a -> Just (a,p)
+      Prefix -> Nothing
     f (l, s, r, k) = Middle l s r k
     (_, xs') = holesAfter (init xs) (fst $ last xs)
     fxs = inits $ map fst xs'
@@ -88,12 +88,12 @@ cut o@(Op1 _ x xs opening p) =
     rs = map ((++[snd $ last xs]) . tail) (tail fxs)
     ks = map head (tail sxs)
 
-cut o@(Op2 keep x [] h y) =
-  [First Nothing x [y] h, Last o Nothing [x] y keep 1]
-cut o@(Op2 keep x xs h y) =
+cut o@(Op2 _ x [] h y) =
+  [First Nothing x [y] h, Last o]
+cut o@(Op2 _ x xs h y) =
   First Nothing x [snd $ head xs] (fst $ head xs) :
   map f (zip4 ls ss rs ks) ++
-  [Last o Nothing (x:map snd xs) y keep ar]
+  [Last o]
   where
     f (l, s, r, k) = Middle l s r k
     (_, xs') = holesAfter xs h
@@ -103,7 +103,6 @@ cut o@(Op2 keep x xs h y) =
     ss = map head (tail fxs)
     rs = map ((++[y]) . tail) (tail fxs)
     ks = map head (tail sxs)
-    ar = length xs + 1
 
 -- Takes a list of pair (hole,string) and returns
 -- a list of (string,hole) where the ordre and interleaving
@@ -231,16 +230,13 @@ findBegin table x = case filterParts $ findParts table x of
     Right pt -> Begin pt
   (_,_,m,l) -> MissingBegin $ map previous (m++l)
 
--- TODO the complete Op inside then Last and Lone Part makes the other fields
--- unnecessary.
-
 -- | A Part represent a single symbol of an operator.
 data Part a = First (Maybe (Associativity,Precedence)) a [a] Hole
 -- assoc/prec if it is open, possible successor parts, non-empty, s-expr/distfix
-          | Last (Op a) (Maybe (Associativity,Precedence)) [a] a Bool Int
--- assoc/prec if it is open, possible predecessor parts, non-empty, keep/discard, arity
-          | Lone (Op a) Opening Precedence a Bool
--- opening, precedence, keep/discard
+          | Last (Op a)
+-- The Op1 case cannot have an empty list (this is the Lone case).
+          | Lone Bool a Opening Precedence
+-- Same as Op1 but without the list.
           | Middle [a] a [a] Hole
 -- possible predecessor and successor parts, both non-empty, s-expr/distfix
   deriving (Show, Eq)
@@ -252,8 +248,8 @@ data Opening = Infix Associativity
   deriving (Show, Eq)
 
 original :: Part a -> Op a
-original (Lone o _ _ _ _) = o
-original (Last o _ _ _ _ _) = o
+original (Lone keep x opening p) = Op1 keep x [] opening p
+original (Last o) = o
 original _ = error "can't happen"
 
 priority :: Part a -> Part a -> Priority
@@ -280,7 +276,7 @@ applicator' _ (Branch _) = True
 applicator' _ _ = False
 
 isLone :: Part a -> Bool
-isLone (Lone _ _ _ _ _) = True
+isLone (Lone _ _ _ _) = True
 isLone _ = False
 
 isFirst :: Part a -> Bool
@@ -288,7 +284,7 @@ isFirst (First _ _ _ _) = True
 isFirst _ = False
 
 isLast :: Part a -> Bool
-isLast (Last _ _ _ _ _ _) = True
+isLast (Last _) = True
 isLast _ = False
 
 isMiddle :: Part a -> Bool
@@ -296,80 +292,101 @@ isMiddle (Middle _ _ _ _) = True
 isMiddle _ = False
 
 begin :: Part a -> Bool
-begin (Lone _ _ _ _ _) = True
+begin (Lone _ _ _ _) = True
 begin (First _ _ _ _) = True
 begin _ = False
 
 end :: Part a -> Bool
-end (Lone _ _ _ _ _) = True
-end (Last _ _ _ _ _ _) = True
+end (Lone _ _ _ _) = True
+end (Last _) = True
 end _ = False
 
 discard :: Part a -> Bool
 discard (First _ _ _ _) = False
-discard (Last _ _ _ _ keep _) = not keep
-discard (Lone _ _ _ _ keep) = not keep
+discard (Last (Op1 keep _ _ _ _)) = not keep
+discard (Last (Op2 keep _ _ _ _)) = not keep
+discard (Lone keep _ _ _) = not keep
 discard (Middle _ _ _ _) = False
 
 symbol :: Part a -> a
 symbol (First _ s _ _) = s
-symbol (Last _ _ _ s _ _) = s
-symbol (Lone _ _ _ s _) = s
+symbol (Last (Op1 _ _ xs _ _)) = snd $ last xs
+symbol (Last (Op2 _ _ _ _ s)) = s
+symbol (Lone _ s _ _) = s
 symbol (Middle _ s _ _) = s
 
 arity :: Part a -> Int
 arity (First _ _ _ _) = error "arity: bad argument"
 arity (Middle _ _ _ _) = error "arity: bad argument"
-arity (Lone _ (Infix _) _ _ _) = 2
-arity (Lone _ _ _ _ _) = 1
-arity (Last _ _ _ _ _ ar) = ar
+arity (Lone _ _ (Infix _) _) = 2
+arity (Lone _ _ _ _) = 1
+arity (Last (Op1 _ _ xs opening _)) = case opening of
+  Postfix -> length xs + 1
+  Infix _ -> length xs + 2
+  Prefix -> length xs + 1
+arity (Last (Op2 _ _ xs _ _)) = length xs + 1
+
 
 leftOpen :: Part a -> Bool
 leftOpen (First (Just _) _ _ _) = True
 leftOpen (First _ _ _ _) = False
-leftOpen (Last _ _ _ _ _ _) = True
-leftOpen (Lone _ Prefix _ _ _) = False
-leftOpen (Lone _ _ _ _ _) = True
+leftOpen (Last _) = True
+leftOpen (Lone _ _ Prefix _) = False
+leftOpen (Lone _ _ _ _) = True
 leftOpen (Middle _ _ _ _) = True
 
 rightOpen :: Part a -> Bool
 rightOpen (First _ _ _ _) = True
-rightOpen (Last _ (Just _) _ _ _ _) = True
-rightOpen (Last _ _ _ _ _ _) = False
-rightOpen (Lone _ Postfix _ _ _) = False
-rightOpen (Lone _ _ _ _ _) = True
+rightOpen (Last (Op1 _ _ _ Prefix _)) = True
+rightOpen (Last (Op1 _ _ _ (Infix _) _)) = True
+rightOpen (Last _) = False
+rightOpen (Lone _ _ Postfix _) = False
+rightOpen (Lone _ _ _ _) = True
 rightOpen (Middle _ _ _ _) = True
 
 rightHole :: Part a -> Maybe Hole
 rightHole (First _ _ _ k) = Just k
-rightHole (Last _ _ _ _ _ _) = Nothing
-rightHole (Lone _ _ _ _ _) = Nothing
+rightHole (Last _) = Nothing
+rightHole (Lone _ _ _ _) = Nothing
 rightHole (Middle _ _ _ k) = Just k
 
+-- Not the true associativity of the original operator.
+-- E.g. this will return Nothing for the last part of
+-- a postfix operator, but a maybe for its first part.
 associativity :: Part a -> Maybe (Associativity,Precedence)
 associativity (First ap _ _ _) = ap
-associativity (Last _ ap _ _ _ _) = ap
-associativity (Lone _ Postfix p _ _) = Just (NonAssociative,p)
-associativity (Lone _ Prefix p _ _) = Just (NonAssociative,p)
-associativity (Lone _ (Infix a) p _ _) = Just (a,p)
+associativity (Last (Op1 _ _ _ opening p)) = case opening of
+  Postfix -> Nothing
+  Infix a -> Just (a,p)
+  Prefix -> Just (NonAssociative,p)
+associativity (Last (Op2 _ _ _ _ _)) = Nothing
+associativity (Lone _ _ Postfix p) = Just (NonAssociative,p)
+associativity (Lone _ _ Prefix p) = Just (NonAssociative,p)
+associativity (Lone _ _ (Infix a) p) = Just (a,p)
 associativity (Middle _ _ _ _) = Nothing
 
 next :: Part a -> [a]
 next (First _ _ r _) = r
-next (Last _ _ _ _ _ _) = []
-next (Lone _ _ _ _ _) = []
+next (Last _) = []
+next (Lone _ _ _ _) = []
 next (Middle _ _ r _) = r
 
 previous :: Part a -> [a]
 previous (First _ _ _ _) = []
-previous (Last _ _ l _ _ _) = l
-previous (Lone _ _ _ _ _) = []
+previous (Last (Op1 _ _ [] _ _)) = error "can't happen"
+previous (Last (Op1 _ a [_] _ _)) = [a]
+previous (Last (Op1 _ a xs _ _)) = a : map snd (init xs)
+previous (Last (Op2 _ a [] _ _)) = [a]
+previous (Last (Op2 _ a xs _ _)) = a : map snd xs
+previous (Lone _ _ _ _) = []
 previous (Middle l _ _ _) = l
 
 current :: Part a -> [a]
 current (First _ s _ _) = [s]
-current (Last _ _ l s _ _) = l ++ [s]
-current (Lone _ _ _ s _) = [s]
+current (Last (Op1 _ _ [] _ _)) = error "can't happen"
+current (Last (Op1 _ x xs _ _)) = x : map snd xs
+current (Last (Op2 _ a xs _ b)) = a : map snd xs ++ [b]
+current (Lone _ s _ _) = [s]
 current (Middle l s _ _) = l ++ [s]
 
 continue :: Token a => Part a -> Part a -> Bool
@@ -402,7 +419,7 @@ groupMiddle _ = error "groupMiddle: not a Middle part"
 
 groupLast :: [Part a] -> Part a
 groupLast [] = error "groupLast: empty list"
-groupLast [l@(Last _ _ _ _ _ _)] = l
+groupLast [l@(Last _)] = l
 groupLast _ = error "groupLast: not a Last part"
 
 ----------------------------------------------------------------------
