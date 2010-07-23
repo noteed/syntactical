@@ -1,3 +1,7 @@
+-- |
+-- The data structures (and associated functions) used in the
+-- parser. For a normal usage, it should be enough
+-- to import only 'Text.Syntactical', not directly this module.
 module Text.Syntactical.Data (
   SExpr(..), Tree(..), Op(..), Opening(..),
   Associativity(..), Hole(..), Part(..), Table, Priority(..),
@@ -9,7 +13,7 @@ module Text.Syntactical.Data (
   applicator, applicator', continue, original, priority,
   arity, symbol, symbols, next, previous, current,
   findBoth, findBegin, FindBegin(..), FindBoth(..), Ambiguity(..),
-  Token, toString, operator, consider,
+  Token(..),
   showPart, showSExpr, showTree
   ) where
 
@@ -20,6 +24,7 @@ import Data.List
 ----------------------------------------------------------------------
 
 -- | The s-expression data type used as input and output of the parser.
+-- The type is parametrized by the type of the token.
 data SExpr a = List [SExpr a]
              | Atom a
   deriving (Eq, Show)
@@ -39,7 +44,8 @@ class Token a where
   -- ^ create an output node from an operator and its arguments
   consider :: a -> a -> Bool
   -- ^ test if two tokens are the same (used to find match from the
-  -- operator table)
+  -- operator table). A default definition that compares the result
+  -- of toString is provided.
 
   -- default definition for consider tests the string representation
   consider a b = toString a == toString b
@@ -47,9 +53,11 @@ class Token a where
 considers :: Token a => [a] -> [a] -> Bool
 considers a b = length a == length b && and (zipWith consider a b)
 
--- | The operator representation. It allows infix, prefix, postfix,
+-- | The operator representation, parametrized by the token type.
+-- It allows infix, prefix, postfix,
 -- and closed operators, with possibly multiple internal holes.
 -- Different holes are possible, to drive the parse in specific ways.
+
 -- The boolean is used to specify if the operator should show up
 -- in the result or be discarded. The opening further specifies
 -- in the non-closed variant if the operator is prefix, infix, or postfix.
@@ -58,15 +66,17 @@ data Op a =
   | Op2 Bool a [(Hole,a)] Hole a
   deriving (Eq, Show)
 
+-- | Set the precedence of a given operator.
 setPrecedence :: Precedence -> Op a -> Op a
 setPrecedence p (Op1 keep x xs opening _) = Op1 keep x xs opening p
 setPrecedence _ c = c
 
+-- | Return all the tokens of a given operator.
 symbols :: Op a -> [a]
 symbols (Op1 _ a xs _ _) = a : map snd xs
 symbols (Op2 _ a xs _ b) = a : map snd xs ++ [b]
 
--- ^ Separate an operator in its different parts.
+-- | Separate an operator in its different parts.
 cut :: Op a -> [Part a]
 cut (Op1 keep x [] opening p) =
   [Lone keep x opening p]
@@ -113,8 +123,8 @@ holesAfter [] h = (h, [])
 holesAfter [(a,b)] h = (a, [(b,h)])
 holesAfter ((a,b):xs@((c,_):_)) h = (a, (b,c) : snd (holesAfter xs h))
 
--- buildTable constructs an operator table that can be
--- used with the shunt function. Operators are given
+-- | 'buildTable' constructs an operator table that can be
+-- used with the 'shunt' function. Operators are given
 -- in decreasing precedence order.
 buildTable :: [[Op a]] -> Table a
 buildTable ls = Table . concat $ zipWith f ls [n, n - 1 .. 0]
@@ -123,15 +133,19 @@ buildTable ls = Table . concat $ zipWith f ls [n, n - 1 .. 0]
 
 -- | The Hole is used to give various behaviours when dealing
 -- with internal holes.
--- SExpression means the 'content' of the hole should be
--- parsed as an s-expression. The resulting value is a List.
--- This means the hole can be empty or contain one or more
--- sub-expression.
--- Distfix means the 'content' of the hole should be parsed
--- as a distfix expression. The hole cannot be left empty.
-data Hole = SExpression | Distfix
+data Hole =
+    SExpression
+  -- ^ SExpression means the 'content' of the hole should be
+  -- parsed as an s-expression. The resulting value is a List.
+  -- This means the hole can be empty or contain one or more
+  -- sub-expression(s).
+  | Distfix
+  -- ^ Distfix means the 'content' of the hole should be parsed
+  -- as a distfix expression. In this case feeding an empty hole
+  -- will generate a parse error.
   deriving (Eq, Show)
 
+-- | Specify the associativity of an infix operator.
 data Associativity = NonAssociative | LeftAssociative | RightAssociative
   deriving (Show, Eq)
 
@@ -139,6 +153,7 @@ type Precedence = Int
 
 data Priority = Lower | Higher | NoPriority
 
+-- | The type of the operator table.
 newtype Table a = Table [Part a]
 
 -- NoBegin: no parts with the requested symbol.
@@ -308,6 +323,7 @@ discard (Last (Op2 keep _ _ _ _)) = not keep
 discard (Lone keep _ _ _) = not keep
 discard (Middle _ _ _ _) = False
 
+-- | Return the token of a given Part.
 symbol :: Part a -> a
 symbol (First _ s _ _) = s
 symbol (Last (Op1 _ _ xs _ _)) = snd $ last xs
@@ -315,6 +331,8 @@ symbol (Last (Op2 _ _ _ _ s)) = s
 symbol (Lone _ s _ _) = s
 symbol (Middle _ s _ _) = s
 
+-- | Return the arity of a complete Part. It is an error to call this
+-- function on a First or Middle part.
 arity :: Part a -> Int
 arity (First _ _ _ _) = error "arity: bad argument"
 arity (Middle _ _ _ _) = error "arity: bad argument"
@@ -365,12 +383,14 @@ associativity (Lone _ _ Prefix p) = Just (NonAssociative,p)
 associativity (Lone _ _ (Infix a) p) = Just (a,p)
 associativity (Middle _ _ _ _) = Nothing
 
+-- | Return the possible tokens continuing the given part.
 next :: Part a -> [a]
 next (First _ _ r _) = r
 next (Last _) = []
 next (Lone _ _ _ _) = []
 next (Middle _ _ r _) = r
 
+-- | Return the tokens preceding the given part.
 previous :: Part a -> [a]
 previous (First _ _ _ _) = []
 previous (Last (Op1 _ _ [] _ _)) = error "can't happen"
@@ -381,6 +401,7 @@ previous (Last (Op2 _ a xs _ _)) = a : map snd xs
 previous (Lone _ _ _ _) = []
 previous (Middle l _ _ _) = l
 
+-- | Return the tokens of the given part.
 current :: Part a -> [a]
 current (First _ s _ _) = [s]
 current (Last (Op1 _ _ [] _ _)) = error "can't happen"
@@ -426,36 +447,52 @@ groupLast _ = error "groupLast: not a Last part"
 -- Combinators to construct the operator table
 ----------------------------------------------------------------------
 
+-- | Build a infix operator. The precedence is set to 0.
 infx :: Associativity -> a -> Op a
 infx a f = Op1 True f [] (Infix a) 0
 
+-- | Build a infix operator with the keep property set to False.
+-- The precedence is set to 0.
 infx_ :: Associativity -> a -> Op a
 infx_ a f = Op1 False f [] (Infix a) 0
 
+-- | Build a prefix operator. The precedence is set to 0.
 prefx :: a -> Op a
 prefx f = Op1 True f [] Prefix 0
 
+-- | Build a prefix operator with the keep property set to False.
+-- The precedence is set to 0.
 prefx_ :: a -> Op a
 prefx_ f = Op1 False f [] Prefix 0
 
+-- | Build a postfix operator. The precedence is set to 0.
 postfx :: a -> Op a
 postfx f = Op1 True f [] Postfix 0
 
+-- | Build a postfix operator with the keep property set to False.
+-- The precedence is set to 0.
 postfx_ :: a -> Op a
 postfx_ f = Op1 False f [] Postfix 0
 
+-- | Build a closed operator. The precedence is set to 0.
 closed :: a -> Hole -> a -> Op a
 closed f = Op2 True f []
 
+-- | Build a closed operator with the keep property set to False.
+-- The precedence is set to 0.
 closed_ :: a -> Hole -> a -> Op a
 closed_ f = Op2 False f []
 
+-- | Add a new part separated by an SExpression hole to the right
+-- of an operator.
 sexpr :: Op a -> a -> Op a
 sexpr (Op1 keep x rest opening p) y =
   Op1 keep x (rest++[(SExpression,y)]) opening p
 sexpr (Op2 keep x rest k y) z =
   Op2 keep x (rest++[(k,y)]) SExpression z
 
+-- | Add a new part separated by a Distfix hole to the right
+-- of an operator.
 distfix :: Op a -> a -> Op a
 distfix (Op1 keep x rest opening p) y =
   Op1 keep x (rest++[(Distfix,y)]) opening p
@@ -466,6 +503,7 @@ distfix (Op2 keep x rest k y) z =
 -- A few 'show' functions for SExpr, and Tree
 ----------------------------------------------------------------------
 
+-- | Show an s-expression using nested angle brackets.
 showSExpr :: Token a => SExpr a -> String
 showSExpr = tail . f
   where
@@ -473,6 +511,7 @@ showSExpr = tail . f
   f (List []) = ' ' : "⟨⟩"
   f (List es) = ' ' : '⟨' : tail (concatMap f es) ++ "⟩"
 
+-- Similar to showSExpr but for a Tree.
 showTree :: Token a => Tree a -> String
 showTree = tail . f
   where

@@ -1,7 +1,8 @@
 -- |
 -- The modified Shunting-Yard algorithm. The modifications allow function
 -- application by juxtaposition (without any paren around the arguments)
--- and distfix operators.
+-- and distfix operators. For a normal usage, it should be enough
+-- to import only 'Text.Syntactical', not directly this module.
 
 -- Note: The parser allows applying a number to another,
 -- e.g. 1 2. Maybe this could be turned into an option.
@@ -75,7 +76,7 @@ data Failure a =
   | MissingSubBetween a a -- ^ missing sub-expression between parts
   | MissingSubBefore a    -- ^ missing sub-expression before string
   | MissingSubAfter a     -- ^ missing sub-expression after string
-  | Ambiguity Ambiguity   -- ^ the part can be the last or not
+  | Ambiguity Ambiguity   -- ^ a part is used ambiguously in multiple operators
   | Unexpected            -- ^ this is a bug if it happens
   deriving (Eq, Show)
 
@@ -109,7 +110,9 @@ initial ts = S ts [] [[]] Initial
 -- The modified shunting-yard algorithm
 ----------------------------------------------------------------------
 
--- | Parse a list of tokens according to an operator table.
+-- | Parse a list of s-expressions according to an operator table.
+-- Usually the s-expressions will be the result of applying 'Atom'
+-- to each token.
 shunt :: Token a => Table a -> [SExpr a] -> Either (Failure a) (SExpr a)
 shunt table ts = case fix $ initial ts of
   S [] [] [[o']] (Done Success) -> Right o'
@@ -250,6 +253,8 @@ apply _ _ = error "can't happen"
 
 -- | Similar to the 'shunt' function but print the steps
 -- performed by the modified shunting yard algorithm.
+-- This function is useful to understand (and debug) the
+-- modified shunting-yard algorithm.
 steps :: Token a => Table a -> [SExpr a] -> IO ()
 steps table ts = do
   putStrLn "               Input               Stack              Output   Rule"

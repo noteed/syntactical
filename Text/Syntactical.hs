@@ -1,7 +1,22 @@
--- Convenience module exporting what's important.
+-- | This convenience module re-exports from 'Text.Syntactical.Yard'
+-- and 'Text.Syntactical.Data' everything a typical usage of Syntactical
+-- would need.
+
 module Text.Syntactical (
-  module Text.Syntactical.Yard,
-  module Text.Syntactical.Data
+  -- * Parsing
+  shunt, steps, Failure(..), Ambiguity(..), showFailure,
+  -- * Operators
+  Op, Associativity(..), Hole(..),
+  infx, prefx, postfx, closed,
+  infx_, prefx_, postfx_, closed_,
+  sexpr, distfix,
+  arity, symbol, symbols, next, previous, current,
+  -- * Operator tables
+  Table, buildTable,
+  -- * Tokens
+  Token(..),
+  -- * S-Expressions
+  SExpr(..), showSExpr
   ) where
 
 import Text.Syntactical.Yard
@@ -12,7 +27,7 @@ import Text.Syntactical.Data (
   sexpr, distfix,
   buildTable,
   arity, symbol, symbols, next, previous, current,
-  Associativity(..), Hole(..), Table, SExpr(..), Ambiguity(..),
-  Token, toString, operator, consider,
+  Associativity(..), Hole(..), Table, Op, SExpr(..), Ambiguity(..),
+  Token(..),
   showSExpr
   )

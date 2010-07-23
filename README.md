@@ -88,6 +88,7 @@ Future and/or wishes
 - Turn the library into a command-line tool to generate parsers.
 - Check the operator table for ambiguity separately of running the shunting-
   yard.
+- The showSExpr/showTree should not use concatMap and (++).
 
 Before pushing to Hackage
 -------------------------
