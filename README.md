@@ -25,7 +25,7 @@ parentheses (this is not enforced by the library).
     f a => ⟨f a⟩
     1 + f a b => ⟨+ 1 ⟨f a b⟩⟩
 
-    -- parentheses for grouping are are just a closed operator
+    -- parentheses for grouping are just a closed operator
     -- ␣ is the hole, in fact, the + above could be written ␣+␣
     (a) => ⟨(␣) a⟩
 
@@ -52,14 +52,15 @@ Current state
 
 The library works but is still a bit rough. Tests don't cover enough cases and
 it is simple to overlook one. Documentation is missing (but a look at
-tests/Simple is enough to start).
+[`tests/Simple.hs`](tests/Simple.hs) is enough to start).
 
 The HPC shows that a few things are not tested:
-- a few unevaluated Hole values in Simple.hs shows that some operator
-  combinations are not tested)
-- A AmbiguousContinue MiddleOrLast in findContinuing is never returned
-- Surprisingly, it seems the fst element in Maybe (Associativity,Precedence)
-- is not used.
+
+- a few unevaluated Hole values in `Simple.hs` show that some operator
+  combinations are not tested
+- An AmbiguousContinue MiddleOrLast in findContinuing is never returned
+- Surprisingly, it seems the fst element in Maybe (Associativity, Precedence)
+  is not used.
 
 Future and/or wishes
 --------------------

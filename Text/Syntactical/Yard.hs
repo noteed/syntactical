@@ -8,7 +8,7 @@
 -- e.g. 1 2. Maybe this could be turned into an option.
 -- The proper way to forbid such 'number application' is
 -- to use some type-checking. If 1 2 should be disallowed,
--- 1 (2 + 3) or 1 a shoule be disallowed too. The 'apply'
+-- 1 (2 + 3) or 1 a should be disallowed too. The 'apply'
 -- function seems a good place to implement such restriction.
 
 module Text.Syntactical.Yard (
