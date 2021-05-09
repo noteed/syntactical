@@ -1,3 +1,4 @@
+{-# Language FlexibleInstances #-}
 {-# Language TypeSynonymInstances #-}
 module Main where
 
