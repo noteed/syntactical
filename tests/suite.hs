@@ -2,11 +2,11 @@
 {-# Language TypeSynonymInstances #-}
 module Main where
 
+import Data.List (intersperse)
+import System.Environment (getArgs)
 import Test.Framework (defaultMain, testGroup, Test)
 import Test.Framework.Providers.HUnit
 import Test.HUnit hiding (Test)
-import System.Environment (getArgs)
-import Data.List (intersperse)
 
 import Text.Syntactical
 import Text.Syntactical.Data
