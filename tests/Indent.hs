@@ -34,10 +34,15 @@ tests = testGroup "Indent"
   , testCase "do"                $ tokenize "do f a"      @?= Right "do { f a }"
   , testCase "do"                $ tokenize "do f\na"     @?= Right "do { f } ; a"
 
-    -- TODO The two following cases should make an error, although they can be
-    -- rejected by the SExpr-consuming "parser" instead.
-  , testCase "do"                $ tokenize "do f\n a"    @?= Right "do { f } a"
-  , testCase "do"                $ tokenize "do f\n  a"   @?= Right "do { f } a"
+    -- The following cases are rejected; otherwise they would be parsed as
+    -- "do { f } a". See also the comment in `indent`. When trying with GHC,
+    -- it says:
+    --     Unexpected do block in function application:
+    --         do f
+    --     You could write it with parentheses
+    --     Or perhaps you meant to enable BlockArguments
+  , testCase "do" $ assertBool "" $ isLeft $ tokenize "do f\n a"
+  , testCase "do" $ assertBool "" $ isLeft $ tokenize "do f\n  a"
 
   , testCase "do"                $ tokenize "do f\n   a"  @?= Right "do { f ; a }"
   , testCase "do"                $ tokenize "do f\n    a" @?= Right "do { f a }"

@@ -5,7 +5,7 @@
 module Text.Syntactical.Indent where
 
 import Text.ParserCombinators.Parsec
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 
 -- A tree data structure to represent indentation.
 data Tree a =
@@ -66,9 +66,21 @@ aligned p = do
 -- Parse one of the given strings then a block.
 indent :: P (Tree a) -> P a -> P (Tree a)
 indent atom intro = try $ do
+  (l1, c1) <- getPos
   s <- intro
   spaces
+  (l2, c2) <- getPos
   b <- block atom intro
+  spaces
+  (l3, c3) <- getPos
+  -- We check that if a block starts further on the right that the introducing
+  -- keyword (c1 < c2), then when it's done being parsed, the following tokens
+  -- can't start in between the introducing keyword and the block.
+  -- This is to prevent someting like
+  --
+  --   ... = do f
+  --           a
+  when (c1 < c2 && c1 < c3 && c3 < c2) pzero
   return $ Block s b
 
 -- Parse a single (possibly nested) symbol, where the nesting can be
