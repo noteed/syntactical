@@ -11,10 +11,11 @@ import Test.HUnit hiding (Test)
 import Text.Syntactical
 import Text.Syntactical.Data
 
-import qualified Simple
-import qualified Holes
-import qualified Priority
 import qualified Ambiguous
+import qualified Holes
+import qualified Indent
+import qualified Priority
+import qualified Simple
 
 -- Make it possible to shunt around some strings.
 instance Token String where
@@ -76,6 +77,7 @@ testYard = testGroup "Text.Syntactical.Yard"
     map (helper' parsePriority) Priority.tests'
   , testGroup "Ambiguous" $
     map (helper' parseAmbiguous) Ambiguous.tests
+  , Indent.tests
   ]
 
 -- Apply the parser p to i and check if it returns
@@ -87,4 +89,3 @@ helper p (i,o) = testCase i $ case p i of
 helper' p (i,o) = testCase i $ case p i of
   Right o' -> assertFailure $ "unexpected successful parse: " ++ showSExpr o'
   Left o' -> o @=? o'
-
