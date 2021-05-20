@@ -63,15 +63,11 @@ aligned p = do
   -- many1 p but only with p starting exactly at dc
   many1 (getPos >>= \(_,c) -> unless (c == dc) pzero >> p)
 
--- Parse one of the given strings then a block that starts on the
--- same line or on the same or grater column.
+-- Parse one of the given strings then a block.
 indent :: P (Tree a) -> P a -> P (Tree a)
 indent atom intro = try $ do
-  (l1,c1) <- getPos
   s <- intro
   spaces
-  (l2,c2) <- getPos
-  unless (c1 <= c2 || l1 == l2) pzero
   b <- block atom intro
   return $ Block s b
 
