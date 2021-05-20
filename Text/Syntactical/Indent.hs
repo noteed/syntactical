@@ -110,5 +110,3 @@ strides' :: P (Tree a) -> P a -> a -> a -> a ->
   String -> Either ParseError [a]
 strides' atom intro i d sq = flip parse "strides" $
   spaces >> fmap ((i:) . flip (flatten i d sq) [d]) (block atom intro)
-
-

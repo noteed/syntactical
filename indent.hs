@@ -154,6 +154,13 @@ source = do
 keywords :: [String]
 keywords = words "let where of"
 
+-- Parse a keyword that introduces an indentation level.
+keyword :: P MyToken
+keyword = do
+  src <- source
+  str <- choice (map string keywords)
+  return $ MyToken src str
+
 -- Parse a symbol. A symbol is any consecutive list of non-blank
 -- characters except for `,()⟨⟩[], which are each a single symbol.
 sym :: P (Tree MyToken)
@@ -189,10 +196,5 @@ str = try $ do
   return . Sym $ MyToken src ('"' : x ++ "\"")
 
 tokenize = strides' (empty <|> str <|> sym)
-  p
+  keyword
   "{" "}" ";"
-  where
-  p = do
-    src <- source
-    str <- choice (map string $ words "let where of")
-    return $ MyToken src str
