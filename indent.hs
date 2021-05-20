@@ -13,6 +13,39 @@ import Text.Syntactical
 import Text.Syntactical.Indent (Tree(..), strides')
 
 
+--------------------------------------------------------------------------------
+-- Simple command-line program
+-- -i   just show the result of the tokenizing (indentation)
+-- -fi  idem on a file
+-- -f   apply the shunting yard to the file
+--      apply the shunting yard to the argument
+main :: IO ()
+main = do
+  args <- getArgs
+  case args of
+    ["-i", s] -> case tokenize s of
+      Right a -> putStrLn . unwords $ map toString a
+      Left err -> putStrLn $ "indentation error: " ++ show err
+    ["-fi", fn] -> do
+      s <- readFile fn
+      case tokenize s of
+        Right a -> putStrLn . unwords $ map toString a
+        Left err -> putStrLn $ "indentation error: " ++ show err
+    ["-f", fn] -> do
+      s <- readFile fn
+      case tokenize s of
+        Right a -> case shunt table0 . map Atom $ a of
+          Right e -> putStrLn $ showSExpr e
+          Left f -> putStrLn $ showFailure f
+        Left err -> putStrLn $ "indentation error: " ++ show err
+    [s] -> case tokenize s of
+      Right a -> case shunt table0 . map Atom $ a of
+        Right e -> putStrLn $ showSExpr e
+        Left f -> putStrLn $ showFailure f
+      Left err -> putStrLn $ "indentation error: " ++ show err
+    _ -> putStrLn "Usage: (TODO)"
+
+
 ----------------------------------------------------------------------
 -- The token type for Syntactical
 ----------------------------------------------------------------------
@@ -163,38 +196,3 @@ tokenize = strides' (empty <|> str <|> sym)
     src <- source
     str <- choice (map string $ words "let where of")
     return $ MyToken src str
-
-----------------------------------------------------------------------
--- Simple command-line program
--- -i   just show the result of the tokenizing (indentation)
--- -fi  idem on a file
--- -f   apply the shunting yard to the file
---      apply the shunting yard to the argument
-----------------------------------------------------------------------
-
-main :: IO ()
-main = do
-  args <- getArgs
-  case args of
-    ["-i", s] -> case tokenize s of
-      Right a -> putStrLn . unwords $ map toString a
-      Left err -> putStrLn $ "indentation error: " ++ show err
-    ["-fi", fn] -> do
-      s <- readFile fn
-      case tokenize s of
-        Right a -> putStrLn . unwords $ map toString a
-        Left err -> putStrLn $ "indentation error: " ++ show err
-    ["-f", fn] -> do
-      s <- readFile fn
-      case tokenize s of
-        Right a -> case shunt table0 . map Atom $ a of
-          Right e -> putStrLn $ showSExpr e
-          Left f -> putStrLn $ showFailure f
-        Left err -> putStrLn $ "indentation error: " ++ show err
-    [s] -> case tokenize s of
-      Right a -> case shunt table0 . map Atom $ a of
-        Right e -> putStrLn $ showSExpr e
-        Left f -> putStrLn $ showFailure f
-      Left err -> putStrLn $ "indentation error: " ++ show err
-    _ -> putStrLn "Usage: (TODO)"
-
