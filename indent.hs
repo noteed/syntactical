@@ -154,9 +154,15 @@ source = do
 keywords :: [String]
 keywords = words "let where of"
 
+tokenize = strides' atom intro "{" "}" ";"
+
+-- Parse an atom.
+atom :: P (Tree MyToken)
+atom = empty <|> str <|> sym
+
 -- Parse a keyword that introduces an indentation level.
-keyword :: P MyToken
-keyword = do
+intro :: P MyToken
+intro = do
   src <- source
   str <- choice (map string keywords)
   return $ MyToken src str
@@ -194,7 +200,3 @@ str = try $ do
   _ <- char '"'
   spaces
   return . Sym $ MyToken src ('"' : x ++ "\"")
-
-tokenize = strides' (empty <|> str <|> sym)
-  keyword
-  "{" "}" ";"
