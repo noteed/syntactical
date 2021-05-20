@@ -1,5 +1,6 @@
 module Indent where
 
+import Data.Either (isLeft)
 import Test.Framework (testGroup, Test)
 import Test.Framework.Providers.HUnit
 import Test.HUnit hiding (Test)
@@ -13,8 +14,7 @@ tests = testGroup "Indent"
   [ testCase "one atom"          $ tokenize "f"           @?= Right "f"
   , testCase "one atom"          $ tokenize " f"          @?= Right "f"
 
-    -- TODO This should be an error.
-  , testCase "one atom"          $ tokenize " f\na"       @?= Right "f"
+  , testCase "parse error" $ assertBool "" $ isLeft $ tokenize " f\na"
 
   , testCase "application"       $ tokenize "f a"         @?= Right "f a"
   , testCase "application"       $ tokenize "f a b"       @?= Right "f a b"
