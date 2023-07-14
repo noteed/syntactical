@@ -1,5 +1,5 @@
 Name:                syntactical
-Version:             0.1
+Version:             0.1.1
 Synopsis:            Distfix expression parsing library
 Description:         Syntactical is an expression parsing library. It supports
                      distfix operators and function application written as
@@ -20,6 +20,7 @@ Source-repository head
 
 Library
   Exposed-modules:     Text.Syntactical.Data,
+                       Text.Syntactical.Indent,
                        Text.Syntactical.Yard,
                        Text.Syntactical
 
