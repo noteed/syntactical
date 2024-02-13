@@ -4,8 +4,9 @@
 -- tree.
 module Text.Syntactical.Indent where
 
+import Data.String
+import Protolude hiding (try, sourceColumn, sourceLine, (<|>))
 import Text.ParserCombinators.Parsec
-import Control.Monad (unless, when)
 
 -- A tree data structure to represent indentation.
 data Tree a =
@@ -27,7 +28,7 @@ flatten i d sq = symStrides
 
     symStride (Stride ts) = symTrees ts
 
-    symTrees [] = id
+    symTrees [] = identity
     symTrees (t:ts) = symTree t . symTrees ts
 
     symTree (Sym x) = (x :)

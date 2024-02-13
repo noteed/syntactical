@@ -16,8 +16,8 @@ module Text.Syntactical.Yard (
   initial, isDone, shunt, step, steps, showFailure
   ) where
 
-import Data.List (intersperse)
-
+import Data.String
+import Protolude hiding (bracket, unwords)
 import Text.Syntactical.Data (
   SExpr(..), Tree(..),
   Hole(..), Part(..), Table, Priority(..),
@@ -117,7 +117,7 @@ shunt :: Token a => Table a -> [SExpr a] -> Either (Failure a) (SExpr a)
 shunt table ts = case fix $ initial ts of
   S [] [] [[o']] (Done Success) -> Right o'
   S _ _ _ (Done (Failure f)) -> Left f
-  _ -> error "can't happen" -- the Success case has only the previous form.
+  _ -> panic "can't happen" -- the Success case has only the previous form.
   where fix s = let s' = step table s in
                 if isDone s' then s' else fix s'
 
@@ -160,7 +160,7 @@ step table sh@(S tt@(t@(Atom x):ts) st@(s@(Part y):ss) oo@(os:oss) ru) =
     BContinue pt1 -> go pt1
     BBegin pt1 -> go pt1
     BMissingBegin ps -> rule sh (failure $ ps `MissingBefore` x)
-    BNothing -> error "can't happen" -- x is in the table for sure
+    BNothing -> panic "can't happen" -- x is in the table for sure
     BAmbiguous amb -> rule sh (failure $ Ambiguity amb)
   where
     go pt1
@@ -237,7 +237,7 @@ step _ sh = rule sh (failure Unexpected)
 apply :: Token a => Tree a -> [[SExpr a]] -> [[SExpr a]]
 apply (Part y) (os:oss) | end y =
   if length l /= nargs
-  then error "can't happen" -- holes are always filled by one expression
+  then panic "can't happen" -- holes are always filled by one expression
   else (operator (original y) (reverse l) : r) : oss
   where nargs = arity y
         (l,r) = splitAt nargs os
@@ -245,7 +245,7 @@ apply (Leaf x) (os:h:oss) =  (ap:h):oss
   where ap = if null os then Atom x else List (Atom x:reverse os)
 apply (Branch xs) (os:h:oss) =  (ap:h):oss
   where ap = if null os then List (map t2s xs) else List (List (map t2s xs):reverse os)
-apply _ _ = error "can't happen"
+apply _ _ = panic "can't happen"
 
 ----------------------------------------------------------------------
 -- Visualize the sunting-yard algorithm steps
@@ -257,7 +257,7 @@ apply _ _ = error "can't happen"
 -- modified shunting-yard algorithm.
 steps :: Token a => Table a -> [SExpr a] -> IO ()
 steps table ts = do
-  putStrLn "               Input               Stack              Output   Rule"
+  putStrLn @Text "               Input               Stack              Output   Rule"
   let sh = iterate (step table) $ initial ts
       l = length $ takeWhile (not . isDone) sh
   mapM_ (putStrLn . showShunt) (take (l + 1) sh)
@@ -276,7 +276,7 @@ t2s :: Tree a -> SExpr a
 t2s (Leaf x) = Atom x
 t2s (Branch xs) = List $ map t2s xs
 -- The 'operator' function is used in this case
-t2s (Part _) = error "can't convert a Tree Part to a SExpr"
+t2s (Part _) = panic "can't convert a Tree Part to a SExpr"
 
 ----------------------------------------------------------------------
 -- A few 'show' functions for Failure, Rule, and Shunt

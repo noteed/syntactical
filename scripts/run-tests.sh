@@ -1,4 +1,11 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i bash ../shell.nix
 
-runghc -isrc/ -itests/ tests/suite.hs
+runghc \
+  -isrc/ \
+  -itests/ \
+  -XNoImplicitPrelude \
+  -XOverloadedStrings \
+  -XTypeApplications \
+  -Wall \
+  tests/suite.hs

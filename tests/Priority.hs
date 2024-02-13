@@ -1,5 +1,8 @@
 module Priority where
 
+import Data.List (head)
+import Data.String
+import Protolude hiding (head, Associativity, First, Infix, LeftAssociative, Prefix, Last, RightAssociative)
 import Text.Syntactical
 import Text.Syntactical.Data
 

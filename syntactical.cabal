@@ -1,11 +1,11 @@
-cabal-version:       >=1.10
+cabal-version:       2.2
 Name:                syntactical
 Version:             0.1.1
 Synopsis:            Distfix expression parsing library
 Description:         Syntactical is an expression parsing library. It supports
                      distfix operators and function application written as
                      juxtaposition of symbols.
-License:             BSD3
+License:             BSD-3-Clause
 License-file:        LICENSE
 Author:              Vo Minh Thu <noteed@gmail.com>
 Maintainer:          Vo Minh Thu <noteed@gmail.com>
@@ -18,23 +18,46 @@ Source-repository head
   type: git
   location: git://github.com/noteed/syntactical.git
 
-Library
+common common-extensions
+  default-language: Haskell2010
+  default-extensions:
+    NoImplicitPrelude
+    OverloadedStrings
+    TypeApplications
+
+library
+  import: common-extensions
   hs-source-dirs:      src
   Exposed-modules:     Text.Syntactical.Data,
                        Text.Syntactical.Indent,
                        Text.Syntactical.Yard,
                        Text.Syntactical
 
-  Build-depends:    base >= 4 && < 5
-                  , parsec
+  Build-depends:
+      base-noprelude >=4.7 && <5
+    , parsec
+    , protolude
 
   ghc-options:         -Wall
 
+executable syntactical-indent
+  import: common-extensions
+  main-is: indent.hs
+  hs-source-dirs: bin
+  build-depends:
+      base-noprelude >=4.7 && <5
+    , parsec
+    , protolude
+    , syntactical
+    , text
+
 test-suite syntactical-tests
+  import: common-extensions
   type:                exitcode-stdio-1.0
   main-is:             suite.hs
   build-depends:       base
                      , HUnit
+                     , protolude
                      , parsec
                      , syntactical
                      , test-framework
@@ -43,10 +66,12 @@ test-suite syntactical-tests
   ghc-options:         -Wall
 
 test-suite syntactical-permutations
+  import: common-extensions
   type:                exitcode-stdio-1.0
   main-is:             permutations.hs
   build-depends:       base
                      , HUnit
+                     , protolude
                      , syntactical
                      , test-framework
                      , test-framework-hunit

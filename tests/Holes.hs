@@ -1,5 +1,7 @@
 module Holes where
 
+import Data.String
+import Protolude hiding (head, Associativity, First, Infix, LeftAssociative, Prefix, Last)
 import Text.Syntactical
 import Text.Syntactical.Data
 
@@ -23,7 +25,7 @@ table = buildTable
  ]
 
 -- [(input, expected output)]
-tests :: [(String,String)]
+tests :: [(String, String)]
 tests =
   [ ("1", "1")
   , ("(1)", "1")

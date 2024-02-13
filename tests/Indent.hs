@@ -1,11 +1,12 @@
 module Indent where
 
 import Data.Either (isLeft)
+import Data.String
+import Protolude hiding (unwords)
 import Test.Framework (testGroup, Test)
 import Test.Framework.Providers.HUnit
 import Test.HUnit hiding (Test)
 import Text.ParserCombinators.Parsec
-
 import Text.Syntactical.Indent
 
 

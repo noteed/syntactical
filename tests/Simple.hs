@@ -1,10 +1,11 @@
 module Simple where
 
+import Data.String
+import Protolude hiding (head, Associativity, First, Infix, LeftAssociative, Prefix, Last, RightAssociative)
+import System.Environment (getArgs)
 import Test.Framework (defaultMain, testGroup, Test)
 import Test.Framework.Providers.HUnit
 import Test.HUnit hiding (Test)
-import System.Environment (getArgs)
-
 import Text.Syntactical
 import Text.Syntactical.Data
 

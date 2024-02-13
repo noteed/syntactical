@@ -17,7 +17,7 @@ in rec
         binaries
       ];
       shellHook = ''
-        # source <(syntactical --bash-completion-script `which syntactical`)
+        # source <(syntactical-indent --bash-completion-script `which syntactical-indent`)
       '';
     };
   }

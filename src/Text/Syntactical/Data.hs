@@ -17,7 +17,9 @@ module Text.Syntactical.Data (
   showPart, showSExpr, showTree
   ) where
 
-import Data.List
+import Data.List (head, init, last, tail, unionBy, zip4)
+import Data.String
+import Protolude hiding (head, Associativity, First, Infix, LeftAssociative, Prefix, Last)
 
 ----------------------------------------------------------------------
 -- Data structures to represent trees, operators, and parts
@@ -265,7 +267,7 @@ data Opening = Infix Associativity
 original :: Part a -> Op a
 original (Lone keep x opening p) = Op1 keep x [] opening p
 original (Last o) = o
-original _ = error "can't happen"
+original _ = panic "can't happen"
 
 priority :: Part a -> Part a -> Priority
 priority pt1 pt2 = case (associativity pt1, associativity pt2) of
@@ -334,8 +336,8 @@ symbol (Middle _ s _ _) = s
 -- | Return the arity of a complete Part. It is an error to call this
 -- function on a First or Middle part.
 arity :: Part a -> Int
-arity (First _ _ _ _) = error "arity: bad argument"
-arity (Middle _ _ _ _) = error "arity: bad argument"
+arity (First _ _ _ _) = panic "arity: bad argument"
+arity (Middle _ _ _ _) = panic "arity: bad argument"
 arity (Lone _ _ (Infix _) _) = 2
 arity (Lone _ _ _ _) = 1
 arity (Last (Op1 _ _ xs opening _)) = case opening of
@@ -393,7 +395,7 @@ next (Middle _ _ r _) = r
 -- | Return the tokens preceding the given part.
 previous :: Part a -> [a]
 previous (First _ _ _ _) = []
-previous (Last (Op1 _ _ [] _ _)) = error "can't happen"
+previous (Last (Op1 _ _ [] _ _)) = panic "can't happen"
 previous (Last (Op1 _ a [_] _ _)) = [a]
 previous (Last (Op1 _ a xs _ _)) = a : map snd (init xs)
 previous (Last (Op2 _ a [] _ _)) = [a]
@@ -404,7 +406,7 @@ previous (Middle l _ _ _) = l
 -- | Return the tokens of the given part.
 current :: Part a -> [a]
 current (First _ s _ _) = [s]
-current (Last (Op1 _ _ [] _ _)) = error "can't happen"
+current (Last (Op1 _ _ [] _ _)) = panic "can't happen"
 current (Last (Op1 _ x xs _ _)) = x : map snd xs
 current (Last (Op2 _ a xs _ b)) = a : map snd xs ++ [b]
 current (Lone _ s _ _) = [s]
@@ -418,30 +420,30 @@ filterParts pts = (filter isLone pts, filter isFirst pts,
   filter isMiddle pts, filter isLast pts)
 
 groupFirst :: Token a => [Part a] -> Either Ambiguity (Part a)
-groupFirst [] = error "groupFirst: empty list"
+groupFirst [] = panic "groupFirst: empty list"
 groupFirst (First a' x s' k':pts) = go a' s' k' pts
   where go a s k [] = Right $ First a x s k
         go a s k (First a2 _ s2 k2:xs)
           | a == a2 && k == k2 = go a (unionBy consider s s2) k xs
           | a /= a2 = Left NotSameFirst
           | k /= k2 = Left NotSameHole
-        go _ _ _ _ = error "groupFirst: not a First part"
-groupFirst _ = error "groupFirst: not a First part"
+        go _ _ _ _ = panic "groupFirst: not a First part"
+groupFirst _ = panic "groupFirst: not a First part"
 
 groupMiddle :: Token a => [Part a] -> Maybe (Part a)
-groupMiddle [] = error "groupMiddle: empty list"
+groupMiddle [] = panic "groupMiddle: empty list"
 groupMiddle (Middle ss' x s' k':pts) = go ss' s' k' pts
   where go ss s k [] = Just $ Middle ss x s k
         go ss s k (Middle ss2 _ s2 k2:xs)
-          | not (considers ss ss2) = error "groupMiddle: different prefix"
+          | not (considers ss ss2) = panic "groupMiddle: different prefix"
           | k == k2 = go ss (unionBy consider s s2) k xs
         go _ _ _ _ = Nothing -- ambiguous middle parts
-groupMiddle _ = error "groupMiddle: not a Middle part"
+groupMiddle _ = panic "groupMiddle: not a Middle part"
 
 groupLast :: [Part a] -> Part a
-groupLast [] = error "groupLast: empty list"
+groupLast [] = panic "groupLast: empty list"
 groupLast [l@(Last _)] = l
-groupLast _ = error "groupLast: not a Last part"
+groupLast _ = panic "groupLast: not a Last part"
 
 ----------------------------------------------------------------------
 -- Combinators to construct the operator table

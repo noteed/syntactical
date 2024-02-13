@@ -4,12 +4,13 @@
 -- algorithm terminates always in a valid state (i.e. not Unexpected).
 module Main where
 
+import Data.List (permutations)
+import Data.String
+import Protolude hiding (head, words, Associativity, First, Infix, LeftAssociative, Prefix, Last, RightAssociative)
+import System.Environment (getArgs)
 import Test.Framework (defaultMain, testGroup, Test)
 import Test.Framework.Providers.HUnit
 import Test.HUnit hiding (Test)
-import System.Environment (getArgs)
-import Data.List (permutations)
-
 import Text.Syntactical
 import Text.Syntactical.Yard
 import Text.Syntactical.Data
@@ -18,7 +19,7 @@ import qualified Holes
 
 -- Make it possible to shunt around some strings.
 instance Token String where
-  toString = id
+  toString = identity
   operator o as = List $
     (Atom . concat $ symbols o) : as
 

@@ -2,12 +2,14 @@
 {-# Language TypeSynonymInstances #-}
 module Main where
 
+import Data.List (head)
+import Data.String
+import Protolude hiding (head, words, Associativity, First, Infix, LeftAssociative, Prefix, Last, RightAssociative)
 import Data.List (intersperse)
 import System.Environment (getArgs)
 import Test.Framework (defaultMain, testGroup, Test)
 import Test.Framework.Providers.HUnit
 import Test.HUnit hiding (Test)
-
 import Text.Syntactical
 import Text.Syntactical.Data
 
@@ -19,7 +21,7 @@ import qualified Simple
 
 -- Make it possible to shunt around some strings.
 instance Token String where
-  toString = id
+  toString = identity
   operator o as = List $ Atom a : as
     where a = case o of
             Op1 _ _ _ (Infix _) _ -> '␣' : a' ++ "␣"

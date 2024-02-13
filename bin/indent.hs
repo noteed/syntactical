@@ -1,11 +1,12 @@
-{-# Language OverloadedStrings #-}
 module Main where
 
+import Data.List (head)
+import Data.String
+import qualified Data.Text as T
+import GHC.Exts (IsString(..))
+import Protolude hiding (empty, head, list, many, sourceColumn, sourceLine, sym, try, unwords, words, Associativity, First, Infix, LeftAssociative, Prefix, Last, RightAssociative, (<|>))
 import System.Environment (getArgs)
 import Text.ParserCombinators.Parsec
-
-import GHC.Exts (IsString(..))
-
 import Text.Syntactical
 import Text.Syntactical.Indent (Tree(..), strides')
 
@@ -25,12 +26,12 @@ main = do
       Left err -> putStrLn $ "indentation error: " ++ show err
     ["-fi", fn] -> do
       s <- readFile fn
-      case tokenize s of
+      case tokenize $ T.unpack s of
         Right a -> putStrLn . unwords $ map toString a
         Left err -> putStrLn $ "indentation error: " ++ show err
     ["-f", fn] -> do
       s <- readFile fn
-      case tokenize s of
+      case tokenize $ T.unpack s of
         Right a -> case shunt table0 . map Atom $ a of
           Right e -> putStrLn $ showSExpr e
           Left f -> putStrLn $ showFailure f
@@ -40,7 +41,7 @@ main = do
         Right e -> putStrLn $ showSExpr e
         Left f -> putStrLn $ showFailure f
       Left err -> putStrLn $ "indentation error: " ++ show err
-    _ -> putStrLn "Usage: (TODO)"
+    _ -> putStrLn @Text "Usage: (TODO)"
 
 
 ----------------------------------------------------------------------
