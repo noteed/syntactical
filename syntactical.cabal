@@ -19,6 +19,7 @@ Source-repository head
   location: git://github.com/noteed/syntactical.git
 
 Library
+  hs-source-dirs:      src
   Exposed-modules:     Text.Syntactical.Data,
                        Text.Syntactical.Indent,
                        Text.Syntactical.Yard,
