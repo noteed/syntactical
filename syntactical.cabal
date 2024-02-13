@@ -40,3 +40,14 @@ test-suite syntactical-tests
                      , test-framework-hunit
   hs-source-dirs:      tests
   ghc-options:         -Wall
+
+test-suite syntactical-permutations
+  type:                exitcode-stdio-1.0
+  main-is:             permutations.hs
+  build-depends:       base
+                     , HUnit
+                     , syntactical
+                     , test-framework
+                     , test-framework-hunit
+  hs-source-dirs:      tests
+  ghc-options:         -Wall
