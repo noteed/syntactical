@@ -1,3 +1,4 @@
+cabal-version:       >=1.10
 Name:                syntactical
 Version:             0.1.1
 Synopsis:            Distfix expression parsing library
@@ -12,7 +13,6 @@ Stability:           Provisional
 Category:            Parsing
 Build-type:          Simple
 Extra-source-files:  README.md, tests/*.hs
-Cabal-version:       >=1.6
 
 Source-repository head
   type: git
@@ -27,4 +27,16 @@ Library
   Build-depends:    base >= 4 && < 5
                   , parsec
 
+  ghc-options:         -Wall
+
+test-suite syntactical-tests
+  type:                exitcode-stdio-1.0
+  main-is:             suite.hs
+  build-depends:       base
+                     , HUnit
+                     , parsec
+                     , syntactical
+                     , test-framework
+                     , test-framework-hunit
+  hs-source-dirs:      tests
   ghc-options:         -Wall
